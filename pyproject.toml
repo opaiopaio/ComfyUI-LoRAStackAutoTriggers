@@ -12,6 +12,6 @@ Repository = "https://github.com/opaiopaio/ComfyUI-LoRAStackAutoTriggers"
 # Comfy Registry: https://registry.comfy.org
 # PublisherId 需你在 registry.comfy.org 注册 publisher 后填入(替换 YOUR_PUBLISHER_ID)
 [tool.comfy]
-PublisherId = "YOUR_PUBLISHER_ID"
+PublisherId = "opaiopaio"
 DisplayName = "ComfyUI-LoRAStackAutoTriggers"
 Icon = ""
