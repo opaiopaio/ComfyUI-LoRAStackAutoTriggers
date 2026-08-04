@@ -5,8 +5,8 @@
 import { app } from "../../../scripts/app.js";
 import { api } from "../../../scripts/api.js";
 
-const NODE_NAME = "LoRA Stack Auto Triggers OP";
-const ROUTE = "/op/trigger_words";
+const NODE_NAME = "LoRA Stack Auto Triggers";
+const ROUTE = "/lorastack/trigger_words";
 const SLOTS = 4;
 
 // JS port of oplorast_utils.parse_selector (kept in sync with the backend).

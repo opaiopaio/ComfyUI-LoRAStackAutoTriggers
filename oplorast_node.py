@@ -1,7 +1,7 @@
-﻿# OP node - LoRA Stack Auto Triggers OP
+﻿# ComfyUI-LoRAStackAutoTriggers
 # A JK-style LoRA stacker with integrated auto trigger-word extraction.
 #
-# Model & CLIP weights are independent (v3): clip_weight = 0 means "no CLIP
+# Model & CLIP weights are independent: clip_weight = 0 means "no CLIP
 # effect" (model still applies); a lora is active when switch ON + name
 # selected + (model_weight != 0 OR clip_weight != 0).
 #
@@ -21,7 +21,7 @@ from oplorast_utils import (
 )
 
 
-class LoRAStackAutoTriggersOP:
+class LoRAStackAutoTriggers:
     """Stack up to 4 LoRAs with auto trigger-word extraction and preview."""
 
     @classmethod
@@ -42,7 +42,6 @@ class LoRAStackAutoTriggersOP:
             {"default": "", "tooltip": "Existing LoRA metadata to extend"},
         )
 
-        # 4 LoRA slots, each with original fields + trigger fields + preview
         for i in range(1, 5):
             inputs["required"][f"lora_{i}"] = (
                 "BOOLEAN",
@@ -55,20 +54,14 @@ class LoRAStackAutoTriggersOP:
             inputs["required"][f"model_weight_{i}"] = (
                 "FLOAT",
                 {
-                    "default": 1.0,
-                    "min": -10.0,
-                    "max": 10.0,
-                    "step": 0.01,
+                    "default": 1.0, "min": -10.0, "max": 10.0, "step": 0.01,
                     "tooltip": f"Model (U-Net) weight for LoRA {i}; 0 = no model effect",
                 },
             )
             inputs["required"][f"clip_weight_{i}"] = (
                 "FLOAT",
                 {
-                    "default": 1.0,
-                    "min": -10.0,
-                    "max": 10.0,
-                    "step": 0.01,
+                    "default": 1.0, "min": -10.0, "max": 10.0, "step": 0.01,
                     "tooltip": (
                         f"CLIP (text encoder) weight for LoRA {i}; "
                         "0 = no CLIP effect (model still applies)"
@@ -88,18 +81,14 @@ class LoRAStackAutoTriggersOP:
             inputs["required"][f"trigger_weight_{i}"] = (
                 "FLOAT",
                 {
-                    "default": 1.0,
-                    "min": -10.0,
-                    "max": 10.0,
-                    "step": 0.01,
+                    "default": 1.0, "min": -10.0, "max": 10.0, "step": 0.01,
                     "tooltip": f"Trigger word weight {i} (1.0 = no wrapping)",
                 },
             )
             inputs["required"][f"trigger_preview_{i}"] = (
                 "STRING",
                 {
-                    "default": "",
-                    "multiline": True,
+                    "default": "", "multiline": True,
                     "tooltip": f"Trigger preview {i} (auto-filled by UI)",
                 },
             )
@@ -127,24 +116,15 @@ class LoRAStackAutoTriggersOP:
     RETURN_TYPES = ("LORA_STACK", "STRING", "STRING")
     RETURN_NAMES = ("LORA_STACK", "LORA_PROMPT", "LORA_MetaData")
     FUNCTION = "lora_stacker"
-    CATEGORY = "OP"
+    CATEGORY = "LoRA Stack"
     DESCRIPTION = "LoRA stack with auto trigger-word extraction and live preview."
 
-    def lora_stacker(
-        self,
-        save_hash,
-        force_fetch,
-        fallback_to_filename,
-        lora_stack=None,
-        lora_prompt=None,
-        lora_metadata=None,
-        **kwargs,
-    ):
+    def lora_stacker(self, save_hash, force_fetch, fallback_to_filename,
+                     lora_stack=None, lora_prompt=None, lora_metadata=None, **kwargs):
         lora_list = []
         prompt_segments = []
         meta_segments = []
 
-        # Extend with an existing stack (drop "None" entries)
         if lora_stack is not None:
             lora_list.extend([l for l in lora_stack if l[0] != "None"])
 
@@ -154,19 +134,14 @@ class LoRAStackAutoTriggersOP:
             mw = kwargs.get(f"model_weight_{i}")
             cw = kwargs.get(f"clip_weight_{i}")
 
-            # model & CLIP weights are independent: active if either is non-zero.
-            # clip_weight = 0 just means "no CLIP effect" (model still applies).
             name_ok = name is not None and name != "None"
             enabled = on and name_ok and (mw != 0 or cw != 0)
             if not enabled:
                 continue
 
-            # ---- stack tuple (uses real clip_weight, may be 0) ----
             lora_list.append((name, mw, cw))
-
             stem = Path(name).stem
 
-            # ---- prompt segment: triggers only, or <lora:..> fallback ----
             sel = kwargs.get(f"trigger_selector_{i}", ":")
             tw = kwargs.get(f"trigger_weight_{i}", 1.0)
             tags, _cc, _mc = get_combined_tag_strings(name, force_fetch)
@@ -178,15 +153,13 @@ class LoRAStackAutoTriggersOP:
                     parts = [f"({p}:{tw})" for p in parts]
                 segment = ", ".join(parts)
             elif fallback_to_filename:
-                # no trigger words -> fall back to the lora prompt content
                 segment = f"<lora:{stem}:{mw:.3f}>"
             else:
-                segment = ""  # skip this lora from the prompt
+                segment = ""
 
             if segment:
                 prompt_segments.append(segment)
 
-            # ---- metadata segment ----
             hash_part = ""
             if save_hash:
                 p = folder_paths.get_full_path("loras", name)
@@ -194,7 +167,6 @@ class LoRAStackAutoTriggersOP:
                 hash_part = f": [{sha[:12]}]" if sha else ""
             meta_segments.append(f"{stem}{hash_part}")
 
-        # ---- assemble outputs ----
         if lora_prompt and prompt_segments:
             lorapromptout = f"{lora_prompt}," + ",".join(prompt_segments)
         elif prompt_segments:
@@ -213,9 +185,9 @@ class LoRAStackAutoTriggersOP:
 
 
 NODE_CLASS_MAPPINGS = {
-    "LoRA Stack Auto Triggers OP": LoRAStackAutoTriggersOP,
+    "LoRA Stack Auto Triggers": LoRAStackAutoTriggers,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "LoRA Stack Auto Triggers OP": "LoRA Stack Auto Triggers OP",
+    "LoRA Stack Auto Triggers": "LoRA Stack Auto Triggers",
 }

@@ -37,7 +37,7 @@ def _save_json_atomic(data, path):
             json.dump(data, f, indent=4, ensure_ascii=False)
         os.replace(tmp, path)
     except Exception as e:
-        print(f"[OP] cache save failed: {e}")
+        print(f"[LoRAStackAutoTriggers] cache save failed: {e}")
 
 
 # --------------------------------------------------------------------------- #
@@ -54,7 +54,7 @@ def calculate_sha256(file_path):
                 h.update(chunk)
         return h.hexdigest()
     except Exception as e:
-        print(f"[OP] sha256 failed: {e}")
+        print(f"[LoRAStackAutoTriggers] sha256 failed: {e}")
         return None
 
 
@@ -68,7 +68,7 @@ def get_model_version_info(hash_value):
             return resp.json()
         return None
     except Exception as e:
-        print(f"[OP] civitai request failed: {e}")
+        print(f"[LoRAStackAutoTriggers] civitai request failed: {e}")
         return None
 
 
@@ -87,23 +87,23 @@ def load_and_save_tags(lora_name, force_fetch):
         _save_json_atomic(cache, _CACHE_PATH)
         return []
 
-    print(f"[OP] calculating hash for {lora_name}")
+    print(f"[LoRAStackAutoTriggers] calculating hash for {lora_name}")
     sha = calculate_sha256(lora_path)
     if not sha:
         cache[lora_name] = []
         _save_json_atomic(cache, _CACHE_PATH)
         return []
 
-    print(f"[OP] requesting civitai info for {lora_name}")
+    print(f"[LoRAStackAutoTriggers] requesting civitai info for {lora_name}")
     info = get_model_version_info(sha)
     if info is not None and "trainedWords" in info:
         words = info.get("trainedWords") or []
-        print(f"[OP] civitai tags found for {lora_name}: {len(words)}")
+        print(f"[LoRAStackAutoTriggers] civitai tags found for {lora_name}: {len(words)}")
         cache[lora_name] = words
         _save_json_atomic(cache, _CACHE_PATH)
         return words
 
-    print(f"[OP] no civitai info for {lora_name}")
+    print(f"[LoRAStackAutoTriggers] no civitai info for {lora_name}")
     cache[lora_name] = []
     _save_json_atomic(cache, _CACHE_PATH)
     return []
@@ -126,7 +126,7 @@ def get_metadata(lora_name):
             header_json = json.loads(header)
             return header_json.get("__metadata__")
     except Exception as e:
-        print(f"[OP] metadata read failed: {e}")
+        print(f"[LoRAStackAutoTriggers] metadata read failed: {e}")
         return None
 
 
@@ -148,7 +148,7 @@ def sort_tags_by_frequency(meta_tags):
         ordered = sorted(merged.items(), key=lambda kv: kv[1], reverse=True)
         return [t for t, _ in ordered]
     except Exception as e:
-        print(f"[OP] sort_tags failed: {e}")
+        print(f"[LoRAStackAutoTriggers] sort_tags failed: {e}")
         return []
 
 
@@ -230,13 +230,13 @@ def parse_selector(selector, tags_list):
 # Backend route
 # --------------------------------------------------------------------------- #
 def setup_lora_trigger_routes():
-    """Register /op/trigger_words on the ComfyUI PromptServer."""
+    """Register /lorastack/trigger_words on the ComfyUI PromptServer."""
     from server import PromptServer
     from aiohttp import web
 
     server = PromptServer.instance
 
-    @server.routes.get("/op/trigger_words")
+    @server.routes.get("/lorastack/trigger_words")
     async def get_trigger_words(request):
         lora_name = request.rel_url.query.get("lora_name", "")
         force = request.rel_url.query.get("force", "false").lower() == "true"
@@ -255,7 +255,7 @@ def setup_lora_trigger_routes():
                 }
             )
         except Exception as e:
-            print(f"[OP] route error: {e}")
+            print(f"[LoRAStackAutoTriggers] route error: {e}")
             return web.json_response(
                 {
                     "tags": [],
@@ -266,5 +266,5 @@ def setup_lora_trigger_routes():
                 }
             )
 
-    print("[OP] route registered: /op/trigger_words")
+    print("[LoRAStackAutoTriggers] route registered: /lorastack/trigger_words")
     return True
