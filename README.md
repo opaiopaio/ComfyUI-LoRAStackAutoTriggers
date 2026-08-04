@@ -1,10 +1,6 @@
 ﻿# LoRA Stack Auto Triggers OP
 
-> OPNodes 系列节点 · ComfyUI 自定义节点
-
 一个 ComfyUI 自定义节点，把 **LoRA 堆叠管理** 与 **自动触发词提取** 整合进单个节点：选 LoRA 即自动拉取触发词，界面实时预览，切片选择，一个节点搞定"自动拉取提示词 + LoRA 堆 + 开关 + 模型/CLIP 分强度控制"。
-
-> 命名说明：外层 `OPNodes` 为节点集合目录（未来可放多个节点）；本节点目前仅此一个，暂以节点名 `LoRA Stack Auto Triggers OP` 命名其文件夹，不单独称"节点包"。
 
 ---
 
@@ -15,7 +11,7 @@
 - 以 [jakechai/ComfyUI-JakeUpgrade](https://github.com/jakechai/ComfyUI-JakeUpgrade) 的 `CR_LoRAStack_JK`（LoRA 堆叠节点）的**功能形态为蓝本**，保留其堆叠/开关/分强度/链式串联/提示词与元数据输出等完整能力。
 - 将 [idrirap/ComfyUI-Lora-Auto-Trigger-Words](https://github.com/idrirap/ComfyUI-Lora-Auto-Trigger-Words) 的**触发词自动提取逻辑**（Civitai API 查询 + safetensors 训练元数据解析 + 切片选择器）移植进来，并为每个 LoRA 槽位增加了实时预览。
 
-本项目代码独立编写、独立维护，与上述两个上游项目无附属关系。属于 OPNodes 系列（目前仅含这一个节点）。
+本项目代码独立编写、独立维护，与上述两个上游项目无附属关系。
 
 ## 借用 / 致谢
 
