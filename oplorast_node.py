@@ -1,13 +1,18 @@
-﻿# ComfyUI-LoRAStackAutoTriggers
+# ComfyUI-LoRAStackAutoTriggers
 # A JK-style LoRA stacker with integrated auto trigger-word extraction.
 #
 # Model & CLIP weights are independent: clip_weight = 0 means "no CLIP
 # effect" (model still applies); a lora is active when switch ON + name
 # selected + (model_weight != 0 OR clip_weight != 0).
 #
-# Trigger words: fetched per lora via civitai API (by SHA256) + safetensors
-# training metadata (ss_tag_frequency), merged and deduped. A slice selector
-# + weight + live preview widget are provided per slot (preview filled by JS).
+# Trigger words (v1.1.0): civitai usually returns WHOLE variant sentences
+# ("Default", "costume A", ...), not single tags. `trigger_selector_i` now
+# accepts, in priority order:
+#   ""        -> the first civitai variant (safe default, not "everything")
+#   free text -> injected verbatim (what the picker dialog writes: a
+#                hand-picked substring / a variant with optional parts removed)
+#   [a, b]    -> JSON list
+#   0, 3, 5:8 -> legacy slice syntax over variants+meta (old workflows)
 #
 # Prompt output: triggers-only when available, else <lora:name:weight> fallback.
 from pathlib import Path
@@ -15,14 +20,15 @@ from pathlib import Path
 import folder_paths
 
 from oplorast_utils import (
-    get_combined_tag_strings,
-    parse_selector,
+    get_structured_tags,
+    resolve_selection,
+    split_segments,
     calculate_sha256,
 )
 
 
 class LoRAStackAutoTriggers:
-    """Stack up to 4 LoRAs with auto trigger-word extraction and preview."""
+    """Stack up to 4 LoRAs with auto trigger-word extraction and picker UI."""
 
     @classmethod
     def INPUT_TYPES(cls):
@@ -71,10 +77,12 @@ class LoRAStackAutoTriggers:
             inputs["required"][f"trigger_selector_{i}"] = (
                 "STRING",
                 {
-                    "default": ":",
+                    "default": "",
                     "tooltip": (
-                        f"Trigger selector {i}. ATW slice syntax: "
-                        "0, 3, 5:8, -8:, : (empty part = open end, : = all)"
+                        f"Trigger text for LoRA {i}. Leave empty to use the first "
+                        "civitai variant. Use the \u2699 picker to choose/modify. "
+                        "Free text is injected verbatim; legacy slice syntax "
+                        "(0, 3, 5:8, :) still works."
                     ),
                 },
             )
@@ -82,14 +90,17 @@ class LoRAStackAutoTriggers:
                 "FLOAT",
                 {
                     "default": 1.0, "min": -10.0, "max": 10.0, "step": 0.01,
-                    "tooltip": f"Trigger word weight {i} (1.0 = no wrapping)",
+                    "tooltip": (
+                        f"Wraps every selected segment as (seg:weight) for LoRA {i}; "
+                        "1.0 = no wrapping"
+                    ),
                 },
             )
             inputs["required"][f"trigger_preview_{i}"] = (
                 "STRING",
                 {
-                    "default": "", "multiline": True,
-                    "tooltip": f"Trigger preview {i} (auto-filled by UI)",
+                    "default": "",
+                    "tooltip": f"One-line summary for LoRA {i} (filled by the UI)",
                 },
             )
 
@@ -117,7 +128,7 @@ class LoRAStackAutoTriggers:
     RETURN_NAMES = ("LORA_STACK", "LORA_PROMPT", "LORA_MetaData")
     FUNCTION = "lora_stacker"
     CATEGORY = "LoRA Stack"
-    DESCRIPTION = "LoRA stack with auto trigger-word extraction and live preview."
+    DESCRIPTION = "LoRA stack with auto trigger-word extraction and picker UI."
 
     def lora_stacker(self, save_hash, force_fetch, fallback_to_filename,
                      lora_stack=None, lora_prompt=None, lora_metadata=None, **kwargs):
@@ -142,16 +153,17 @@ class LoRAStackAutoTriggers:
             lora_list.append((name, mw, cw))
             stem = Path(name).stem
 
-            sel = kwargs.get(f"trigger_selector_{i}", ":")
+            sel = kwargs.get(f"trigger_selector_{i}", "")
             tw = kwargs.get(f"trigger_weight_{i}", 1.0)
-            tags, _cc, _mc = get_combined_tag_strings(name, force_fetch)
-            selected = parse_selector(sel, tags)
+            st = get_structured_tags(name, force_fetch)
+            resolved = resolve_selection(sel, st["variants"], st["meta"])
 
-            if selected:
-                parts = [p.strip() for p in selected.split(",") if p.strip()]
-                if tw != 1.0 and parts:
-                    parts = [f"({p}:{tw})" for p in parts]
-                segment = ", ".join(parts)
+            if resolved:
+                if tw != 1.0:
+                    parts = split_segments(resolved)
+                    segment = ", ".join(f"({p}:{tw})" for p in parts)
+                else:
+                    segment = resolved.strip()
             elif fallback_to_filename:
                 segment = f"<lora:{stem}:{mw:.3f}>"
             else:

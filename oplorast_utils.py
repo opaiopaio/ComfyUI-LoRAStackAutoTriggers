@@ -1,9 +1,15 @@
-﻿# OPLoraST trigger-word utilities.
+# ComfyUI-LoRAStackAutoTriggers trigger-word utilities.
 # Ported from ComfyUI-Lora-Auto-Trigger-Words (utils.py) with improvements:
 #   - requests timeout added (original had none -> could hang)
 #   - atomic cache write (os.replace) to reduce concurrent corruption
 #   - cache file kept inside the plugin directory
 #   - exception-safe: returns [] / None instead of crashing
+#
+# v1.1.0 additions:
+#   - get_structured_tags(): civitai variants (whole sentences) kept separate
+#     from the safetensors training-tag dump
+#   - resolve_selection(): accepts free text / JSON list / legacy slice syntax
+#     so the UI can inject an arbitrary hand-picked substring
 import os
 import json
 import hashlib
@@ -17,6 +23,8 @@ except Exception:  # pragma: no cover
 
 _PLUGIN_DIR = os.path.dirname(os.path.abspath(__file__))
 _CACHE_PATH = os.path.join(_PLUGIN_DIR, "loras_tags.json")
+
+_LOG = "[LoRAStackAutoTriggers]"
 
 
 # --------------------------------------------------------------------------- #
@@ -37,7 +45,7 @@ def _save_json_atomic(data, path):
             json.dump(data, f, indent=4, ensure_ascii=False)
         os.replace(tmp, path)
     except Exception as e:
-        print(f"[LoRAStackAutoTriggers] cache save failed: {e}")
+        print(f"{_LOG} cache save failed: {e}")
 
 
 # --------------------------------------------------------------------------- #
@@ -54,7 +62,7 @@ def calculate_sha256(file_path):
                 h.update(chunk)
         return h.hexdigest()
     except Exception as e:
-        print(f"[LoRAStackAutoTriggers] sha256 failed: {e}")
+        print(f"{_LOG} sha256 failed: {e}")
         return None
 
 
@@ -68,12 +76,16 @@ def get_model_version_info(hash_value):
             return resp.json()
         return None
     except Exception as e:
-        print(f"[LoRAStackAutoTriggers] civitai request failed: {e}")
+        print(f"{_LOG} civitai request failed: {e}")
         return None
 
 
 def load_and_save_tags(lora_name, force_fetch):
-    """Fetch civitai trainedWords for a lora, cached to loras_tags.json."""
+    """Fetch civitai trainedWords for a lora, cached to loras_tags.json.
+
+    Each entry of civitai `trainedWords` is usually a WHOLE trigger sentence
+    (one per costume/variant), not a single tag.
+    """
     cache = _load_json(_CACHE_PATH)
     if cache is None:
         cache = {}
@@ -87,23 +99,23 @@ def load_and_save_tags(lora_name, force_fetch):
         _save_json_atomic(cache, _CACHE_PATH)
         return []
 
-    print(f"[LoRAStackAutoTriggers] calculating hash for {lora_name}")
+    print(f"{_LOG} calculating hash for {lora_name}")
     sha = calculate_sha256(lora_path)
     if not sha:
         cache[lora_name] = []
         _save_json_atomic(cache, _CACHE_PATH)
         return []
 
-    print(f"[LoRAStackAutoTriggers] requesting civitai info for {lora_name}")
+    print(f"{_LOG} requesting civitai info for {lora_name}")
     info = get_model_version_info(sha)
     if info is not None and "trainedWords" in info:
         words = info.get("trainedWords") or []
-        print(f"[LoRAStackAutoTriggers] civitai tags found for {lora_name}: {len(words)}")
+        print(f"{_LOG} civitai entries found for {lora_name}: {len(words)}")
         cache[lora_name] = words
         _save_json_atomic(cache, _CACHE_PATH)
         return words
 
-    print(f"[LoRAStackAutoTriggers] no civitai info for {lora_name}")
+    print(f"{_LOG} no civitai info for {lora_name}")
     cache[lora_name] = []
     _save_json_atomic(cache, _CACHE_PATH)
     return []
@@ -126,7 +138,7 @@ def get_metadata(lora_name):
             header_json = json.loads(header)
             return header_json.get("__metadata__")
     except Exception as e:
-        print(f"[LoRAStackAutoTriggers] metadata read failed: {e}")
+        print(f"{_LOG} metadata read failed: {e}")
         return None
 
 
@@ -148,40 +160,48 @@ def sort_tags_by_frequency(meta_tags):
         ordered = sorted(merged.items(), key=lambda kv: kv[1], reverse=True)
         return [t for t, _ in ordered]
     except Exception as e:
-        print(f"[LoRAStackAutoTriggers] sort_tags failed: {e}")
+        print(f"{_LOG} sort_tags failed: {e}")
         return []
 
 
 # --------------------------------------------------------------------------- #
-# Combined tags + selector
+# Structured tags
 # --------------------------------------------------------------------------- #
-def get_combined_tag_strings(lora_name, force_fetch):
-    """Return (combined_tags, civitai_count, meta_only_count).
+def get_structured_tags(lora_name, force_fetch):
+    """Return {"variants": [...], "meta": [...]}.
 
-    civitai tags first, then meta-only tags, deduped. The counts let the UI
-    label each tag's source (civitai vs meta).
+    variants: civitai `trainedWords`, each normally a full trigger sentence
+              (Default / costume A / costume B / alternate ...).
+    meta:     training-tag frequency dump, deduped against variants.
     """
-    civitai = load_and_save_tags(lora_name, force_fetch) or []
-    meta = sort_tags_by_frequency(get_metadata(lora_name)) or []
-
-    combined = []
+    variants = []
     seen = set()
-    for t in civitai:
+    for v in (load_and_save_tags(lora_name, force_fetch) or []):
+        v = str(v).strip()
+        if v and v not in seen:
+            seen.add(v)
+            variants.append(v)
+
+    meta = []
+    for t in (sort_tags_by_frequency(get_metadata(lora_name)) or []):
         t = str(t).strip()
         if t and t not in seen:
             seen.add(t)
-            combined.append(t)
-    civitai_count = len(combined)
+            meta.append(t)
 
-    for t in meta:
-        t = str(t).strip()
-        if t and t not in seen:
-            seen.add(t)
-            combined.append(t)
-    meta_only_count = len(combined) - civitai_count
-    return combined, civitai_count, meta_only_count
+    return {"variants": variants, "meta": meta}
 
 
+def get_combined_tag_strings(lora_name, force_fetch):
+    """Legacy flat view: (variants + meta, variant_count, meta_count)."""
+    st = get_structured_tags(lora_name, force_fetch)
+    flat = list(st["variants"]) + list(st["meta"])
+    return flat, len(st["variants"]), len(st["meta"])
+
+
+# --------------------------------------------------------------------------- #
+# Selection resolution
+# --------------------------------------------------------------------------- #
 def _safe_int(value, default):
     try:
         return int(value)
@@ -226,6 +246,58 @@ def parse_selector(selector, tags_list):
     return ", ".join(output.values())
 
 
+_SLICE_CHARS = set("0123456789,:.- \t")
+
+
+def looks_like_slice(value):
+    """True when the value is slice syntax (digits/colons/commas only)."""
+    s = (value or "").strip()
+    if not s:
+        return False
+    if any(ch not in _SLICE_CHARS for ch in s):
+        return False
+    return any(ch.isdigit() or ch == ":" for ch in s)
+
+
+def resolve_selection(selector_value, variants, meta_tags):
+    """Turn a stored selector value into the text to inject for one lora.
+
+    Accepted forms, in priority order:
+      1. empty            -> first civitai variant (safe default, NOT "all")
+      2. JSON array       -> entries joined with ", "
+      3. slice syntax     -> legacy index selection over variants + meta
+      4. anything else    -> used verbatim (hand-picked / mouse-selected text)
+    """
+    val = selector_value if selector_value is not None else ""
+    stripped = str(val).strip()
+
+    if stripped == "":
+        return variants[0] if variants else ""
+
+    if stripped.startswith("["):
+        try:
+            arr = json.loads(stripped)
+            if isinstance(arr, list):
+                items = [str(x).strip() for x in arr if str(x).strip()]
+                return ", ".join(items)
+        except Exception:
+            pass
+
+    if looks_like_slice(stripped):
+        flat = list(variants) + list(meta_tags)
+        return parse_selector(stripped, flat)
+
+    # literal text: keep it exactly as the user wrote it
+    return str(val)
+
+
+def split_segments(text):
+    """Split a trigger text into comma-separated non-empty segments."""
+    if not text:
+        return []
+    return [p.strip() for p in str(text).split(",") if p.strip()]
+
+
 # --------------------------------------------------------------------------- #
 # Backend route
 # --------------------------------------------------------------------------- #
@@ -240,31 +312,34 @@ def setup_lora_trigger_routes():
     async def get_trigger_words(request):
         lora_name = request.rel_url.query.get("lora_name", "")
         force = request.rel_url.query.get("force", "false").lower() == "true"
+        empty = {
+            "tags": [], "variants": [], "meta": [],
+            "civitai_count": 0, "meta_count": 0, "ok": True,
+        }
         if not lora_name or lora_name == "None":
-            return web.json_response(
-                {"tags": [], "civitai_count": 0, "meta_count": 0, "ok": True}
-            )
+            return web.json_response(empty)
         try:
-            combined, civ_count, meta_count = get_combined_tag_strings(lora_name, force)
+            st = get_structured_tags(lora_name, force)
+            flat = list(st["variants"]) + list(st["meta"])
             return web.json_response(
                 {
-                    "tags": combined,
-                    "civitai_count": civ_count,
-                    "meta_count": meta_count,
+                    "tags": flat,
+                    "variants": st["variants"],
+                    "meta": st["meta"],
+                    "civitai_count": len(st["variants"]),
+                    "meta_count": len(st["meta"]),
                     "ok": True,
                 }
             )
         except Exception as e:
-            print(f"[LoRAStackAutoTriggers] route error: {e}")
+            print(f"{_LOG} route error: {e}")
             return web.json_response(
                 {
-                    "tags": [],
-                    "civitai_count": 0,
-                    "meta_count": 0,
-                    "ok": False,
-                    "error": str(e),
+                    "tags": [], "variants": [], "meta": [],
+                    "civitai_count": 0, "meta_count": 0,
+                    "ok": False, "error": str(e),
                 }
             )
 
-    print("[LoRAStackAutoTriggers] route registered: /lorastack/trigger_words")
+    print(f"{_LOG} route registered: /lorastack/trigger_words")
     return True
