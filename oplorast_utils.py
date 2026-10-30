@@ -13,6 +13,7 @@
 import os
 import json
 import hashlib
+import time
 
 import folder_paths
 
@@ -357,5 +358,22 @@ def setup_lora_trigger_routes():
                 }
             )
 
-    print(f"{_LOG} route registered: /lorastack/trigger_words")
+    @server.routes.get("/lorastack/ping")
+    async def opls_ping(request):
+        """Diagnostic beacon from the frontend extension.
+
+        Appends one line per call to _ping.log next to this file, so extension
+        loading problems can be diagnosed without the browser console.
+        """
+        try:
+            stage = request.rel_url.query.get("stage", "?")
+            with open(
+                os.path.join(_PLUGIN_DIR, "_ping.log"), "a", encoding="utf-8"
+            ) as f:
+                f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')}  {stage}\n")
+        except Exception:
+            pass
+        return web.json_response({"ok": True})
+
+    print(f"{_LOG} route registered: /lorastack/trigger_words, /lorastack/ping")
     return True

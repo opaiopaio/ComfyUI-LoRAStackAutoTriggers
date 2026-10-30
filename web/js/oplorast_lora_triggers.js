@@ -49,7 +49,7 @@ const S = IS_ZH
           chipOn: "点击恢复该片段",
           searchPlaceholder: "搜索标签…（例：mask / hair / dress）",
           freeHint:
-              S.freeHint,
+              "这是最终要注入的文本，可直接编辑。想只取其中一段：用鼠标划选后点「应用选区」。",
           countLine: (n, chars) => `已选 ${n} 段 · ${chars} 字`,
           selInfo: (n) => `选区 ${n} 字`,
           noSelection: "未划选",
@@ -715,6 +715,24 @@ function hasOurSlots(data) {
     return !!(req.trigger_selector_1 || opt.trigger_selector_1);
 }
 
+function hasOurWidgets(node) {
+    return !!(
+        node &&
+        node.widgets &&
+        node.widgets.some((w) => w && w.name === "trigger_selector_1")
+    );
+}
+
+// Fire-and-forget beacon to the backend: lets an extension problem be diagnosed
+// from the server side (the browser console is not always reachable).
+function ping(stage) {
+    try {
+        api.fetchApi("/lorastack/ping?stage=" + encodeURIComponent(stage));
+    } catch (e) {
+        /* never let diagnostics break the UI */
+    }
+}
+
 function setupNode(node) {
     try {
         if (!node || !node.widgets) return;
@@ -728,16 +746,31 @@ function setupNode(node) {
         if (node.setDirtyCanvas) node.setDirtyCanvas(true, true);
     } catch (e) {
         console.error(LOG, "node setup failed", e);
+        ping("setup_failed");
     }
 }
 
 app.registerExtension({
     name: "lorastackautotriggers.picker",
+
+    // Primary hook: runs for every node, whether newly added or loaded from a
+    // saved workflow, and does not depend on the node name (which is localised
+    // now) or on beforeRegisterNodeDef being invoked for us.
+    async nodeCreated(node) {
+        if (!hasOurWidgets(node)) return;
+        ping("nodeCreated");
+        setupNode(node);
+        // Some builds finish attaching widgets slightly later.
+        setTimeout(() => setupNode(node), 250);
+    },
+
+    // Belt and braces: patch the prototype too, so nodes recreated later also
+    // get bound. Every step is idempotent.
     async beforeRegisterNodeDef(nodeType, nodeData) {
         if (!hasOurSlots(nodeData) && !NODE_NAMES.includes(nodeData && nodeData.name)) {
             return;
         }
-        console.info(LOG, "picker hook installed for", (nodeData && nodeData.name) || "?");
+        ping("def_matched");
 
         const onNodeCreated = nodeType.prototype.onNodeCreated;
         nodeType.prototype.onNodeCreated = function () {
@@ -746,9 +779,6 @@ app.registerExtension({
             return r;
         };
 
-        // Workflows loaded from disk do not always run onNodeCreated in the same
-        // order relative to extensions, so bind again after configure. Every
-        // step is idempotent (guarded by _opBound / _opBtnN / type === hidden).
         const onConfigure = nodeType.prototype.onConfigure;
         nodeType.prototype.onConfigure = function () {
             const r = onConfigure ? onConfigure.apply(this, arguments) : undefined;
@@ -758,4 +788,5 @@ app.registerExtension({
     },
 });
 
+ping("module_loaded");
 console.info(LOG, "extension registered (lang:", IS_ZH ? "zh" : "en", ")");
