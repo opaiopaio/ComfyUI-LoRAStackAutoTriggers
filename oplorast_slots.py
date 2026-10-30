@@ -1,8 +1,7 @@
-"""Shared LoRA-slot logic for the two nodes in this package.
+"""Shared LoRA-slot logic for the nodes in this package.
 
-Both `LoRA Stack Auto Triggers` and `LoRA Stack Auto Triggers (Anima Remap)`
-declare the same four slots and resolve trigger text the same way; keeping it
-here means the two nodes can never drift apart.
+`LoRA Stack Auto Triggers` declares four slots and resolves trigger text here;
+keeping it in one place means future changes cannot drift between nodes.
 
 Slot widgets, in display order:
     lora_i            BOOLEAN   enable
@@ -16,6 +15,7 @@ Slot widgets, in display order:
 
 from __future__ import annotations
 
+import math
 from pathlib import Path
 from typing import Iterator, List, Optional, Tuple
 
@@ -29,6 +29,20 @@ from oplorast_utils import (
 )
 
 SLOT_COUNT = 4
+
+
+def _num(value, default=0.0):
+    """Finite float, or `default`.
+
+    A NaN weight would otherwise pass the "!= 0" enabled test (NaN != 0 is
+    True) and poison the model with NaN strengths, which shows up as a grey or
+    black image with no error at all.
+    """
+    try:
+        f = float(value)
+    except (TypeError, ValueError):
+        return float(default)
+    return float(default) if (math.isnan(f) or math.isinf(f)) else f
 
 
 # --------------------------------------------------------------------------- #
@@ -104,12 +118,13 @@ def iter_enabled_slots(kwargs: dict, slot_count: int = SLOT_COUNT) -> Iterator[T
 
     Model and CLIP weights are independent: a slot is active when the switch is
     on, a LoRA is selected, and at least one of the two weights is non-zero.
+    NaN/Inf weights are treated as 0, i.e. the slot stays inactive.
     """
     for i in range(1, slot_count + 1):
         name = kwargs.get(f"lora_name_{i}")
         on = kwargs.get(f"lora_{i}") is True
-        mw = kwargs.get(f"model_weight_{i}")
-        cw = kwargs.get(f"clip_weight_{i}")
+        mw = _num(kwargs.get(f"model_weight_{i}"), 0.0)
+        cw = _num(kwargs.get(f"clip_weight_{i}"), 0.0)
 
         name_ok = name is not None and name != "None"
         if on and name_ok and (mw != 0 or cw != 0):
@@ -131,7 +146,7 @@ def trigger_segment(
     """
     stem = Path(name).stem
     sel = kwargs.get(f"trigger_selector_{i}", "")
-    tw = kwargs.get(f"trigger_weight_{i}", 1.0)
+    tw = _num(kwargs.get(f"trigger_weight_{i}"), 1.0)
 
     st = get_structured_tags(name, force_fetch)
     resolved = resolve_selection(sel, st["variants"], st["meta"])

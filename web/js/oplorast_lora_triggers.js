@@ -15,11 +15,9 @@
 import { app } from "../../../scripts/app.js";
 import { api } from "../../../scripts/api.js";
 
-// Both nodes in this package share the same slot widgets and picker.
-const NODE_NAMES = [
-    "LoRA Stack Auto Triggers",
-    "LoRA Stack Auto Triggers (Anima Remap)",
-];
+// Nodes in this package that carry the slot widgets + picker.
+// (The applier node has no slots, so it is not listed here.)
+const NODE_NAMES = ["LoRA Stack Auto Triggers"];
 const ROUTE = "/lorastack/trigger_words";
 const SLOTS = 4;
 const META_RENDER_LIMIT = 400;

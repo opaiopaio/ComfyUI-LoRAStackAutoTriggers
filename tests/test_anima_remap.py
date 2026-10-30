@@ -1,4 +1,4 @@
-"""Offline tests for the Anima remap layer and both nodes.
+﻿"""Offline tests for the Anima remap layer and both nodes.
 
 Run from the node folder (no ComfyUI required):
 
@@ -63,7 +63,7 @@ import anima_arch as A            # noqa: E402
 import anima_remap as R           # noqa: E402
 import oplorast_slots as S        # noqa: E402
 import oplorast_node as BASE      # noqa: E402
-import oplorast_anima_node as ANI  # noqa: E402
+import oplorast_apply as APPLY  # noqa: E402
 
 # --------------------------------------------------------------------------- #
 # Tiny harness
@@ -262,7 +262,9 @@ check("基础节点 meta", meta, "a")
 # --------------------------------------------------------------------------- #
 # 6. Anima 节点端到端（打桩）
 # --------------------------------------------------------------------------- #
-print("\n=== 6. Anima 节点端到端 ===")
+# 6. 应用节点（LoRA Stack Apply）端到端
+# --------------------------------------------------------------------------- #
+print("\n=== 6. 应用节点（LoRA Stack Apply）端到端 ===")
 
 
 class FakeModel:
@@ -274,72 +276,94 @@ class FakeModel:
 FAKE_PATH = "/fake/mylora.safetensors"
 _FAKE_FILES[FAKE_PATH] = make_lora_sd(range(28))
 
-anima = ANI.LoRAStackAutoTriggersAnimaRemap()
-slot_kw = {
-    "lora_1": True, "lora_name_1": "mylora.safetensors", "model_weight_1": 0.85, "clip_weight_1": 0.0,
-    "trigger_selector_1": "pink hair", "trigger_weight_1": 1.0, "trigger_preview_1": "",
-    "lora_2": False, "lora_name_2": "None", "model_weight_2": 1.0, "clip_weight_2": 1.0,
-    "trigger_selector_2": "", "trigger_weight_2": 1.0, "trigger_preview_2": "",
-    "lora_3": False, "lora_name_3": "None", "model_weight_3": 1.0, "clip_weight_3": 1.0,
-    "trigger_selector_3": "", "trigger_weight_3": 1.0, "trigger_preview_3": "",
-    "lora_4": False, "lora_name_4": "None", "model_weight_4": 1.0, "clip_weight_4": 1.0,
-    "trigger_selector_4": "", "trigger_weight_4": 1.0, "trigger_preview_4": "",
-}
+apply_node = APPLY.LoRAStackApply()
+STACK = [("mylora.safetensors", 0.85, 0.0)]
 
 
-def run_anima(model_layers=40, mode=ANI.REMAP_MODE_KEYS, enable=True,
-              target_choice=A.AUTO_LABEL, source_choice=A.AUTO_LABEL):
+def run_apply(model_layers=40, mode=APPLY.REMAP_MODE_KEYS, enable=True,
+              target_choice=A.AUTO_LABEL, source_choice=A.AUTO_LABEL,
+              stack=None, mult=1.0, apply_clip=True, bypass=False):
     APPLIED.clear()
-    return anima.stack(
+    return apply_node.apply(
         model=FakeModel(model_layers),
+        lora_stack=STACK if stack is None else stack,
+        bypass=bypass,
         enable_remap=enable,
         target_model=target_choice,
         source_model=source_choice,
         remap_mode=mode,
         extend_strength=0.5,
-        save_hash=False,
-        force_fetch=False,
-        fallback_to_filename=True,
-        **slot_kw,
+        weight_multiplier=mult,
+        apply_clip=apply_clip,
+        clip=None,
     )
 
 
-out_model, out_clip, prompt, meta, stack_out, info = run_anima(40)
-check("输出端口数", 6, 6)
-check("prompt 来自触发词", prompt, "pink hair")
-check("meta", meta, "mylora")
-check("stack 输出", stack_out, [("mylora.safetensors", 0.85, 0.0)])
+out_model, out_clip, info = run_apply(40)
+check("输出端口数", len((out_model, out_clip, info)), 3)
 check_true("REMAP_INFO 指出 28->40", "28->40" in info, info)
 check("应用次数", len(APPLIED), 1)
-applied_blocks = sorted(R.block_indices(APPLIED[0]["keys"]))
-check("应用到模型的是 40 代块位", applied_blocks, sorted(A.MAP_28_40.values()))
+check("应用到模型的是 40 代块位", sorted(R.block_indices(APPLIED[0]["keys"])), sorted(A.MAP_28_40.values()))
 check("clip=None 时 clip 强度归零", APPLIED[0]["strength_clip"], 0.0)
+check("模型强度按 stack 传入", APPLIED[0]["strength_model"], 0.85)
 
-# 同代：模型 28 层，不该 remap
-out_model, *_rest, info_same = run_anima(28)
+# 同代：28 层模型
+_, _, info_same = run_apply(28)
 check_true("同代时不重映射", "as-is" in info_same, info_same)
 check("同代时块位保持原样", sorted(R.block_indices(APPLIED[0]["keys"])), list(range(28)))
 
-# 关闭重映射
-out_model, *_r2, info_off = run_anima(40, enable=False)
+# 关闭 remap
+_, _, info_off = run_apply(40, enable=False)
 check_true("关闭 remap 时提示", "disabled" in info_off, info_off)
+
+# bypass
+out_model, out_clip, info_bypass = run_apply(40, bypass=True)
+check("bypass 时不加载任何 LoRA", len(APPLIED), 0)
+check_true("bypass 提示", "bypassed" in info_bypass, info_bypass)
 
 # 降级必须报错
 try:
-    run_anima(28, source_choice="Anima 2.9B (40 layers)")
+    run_apply(28, source_choice="Anima 2.9B (40 layers)")
     check_true("源>目标 应抛错", False, "没有抛错")
 except ValueError as e:
-    check_true("源>目标 抛 ValueError", "cannot" in str(e).lower() or "not supported" in str(e).lower(), str(e))
+    check_true("源>目标 抛 ValueError", "not supported" in str(e).lower(), str(e))
 
 # 手动覆盖目标代
-out_model, *_r3, info_manual = run_anima(28, target_choice="Anima 3.8B (52 layers)")
+_, _, info_manual = run_apply(28, target_choice="Anima 3.8B (52 layers)")
 check_true("手动指定目标代 52 生效", "28->52" in info_manual, info_manual)
 check("28->52 块位", sorted(R.block_indices(APPLIED[0]["keys"])), sorted(A.MAP_28_52.values()))
 
 # 扩展模式
-out_model, *_r4, info_ext = run_anima(40, mode=ANI.REMAP_MODE_EXTEND)
+_, _, info_ext = run_apply(40, mode=APPLY.REMAP_MODE_EXTEND)
 check_true("扩展模式提示", "new layers" in info_ext, info_ext)
 check("扩展后覆盖 40 个块", len(R.block_indices(APPLIED[0]["keys"])), 40)
+
+# 全局权重倍率
+run_apply(40, mult=2.0)
+check("weight_multiplier 生效", APPLIED[0]["strength_model"], 1.7)
+
+# apply_clip 关闭 -> clip 权重强制 0
+run_apply(40, apply_clip=False, stack=[("mylora.safetensors", 0.8, 0.9)])
+check("apply_clip=False 时 clip 归零", APPLIED[0]["strength_clip"], 0.0)
+check("apply_clip=False 时模型强度保留", APPLIED[0]["strength_model"], 0.8)
+
+# NaN 权重：按 0 处理 -> 跳过该条，不污染模型
+run_apply(40, stack=[("mylora.safetensors", float("nan"), float("nan"))])
+check("NaN 权重的条目被跳过", len(APPLIED), 0)
+
+# 0 权重：跳过
+run_apply(40, stack=[("mylora.safetensors", 0.0, 0.0)])
+check("全 0 权重的条目被跳过", len(APPLIED), 0)
+
+# 空 stack / "None" 条目
+_, _, info_empty = run_apply(40, stack=[])
+check("空 stack 不报错", len(APPLIED), 0)
+run_apply(40, stack=[("None", 1.0, 1.0)])
+check('"None" 条目被跳过', len(APPLIED), 0)
+
+# SDXL 风格的 input_blocks 不能被当成 Anima 块
+sdxl_key = "lora_unet_input_blocks_5_1_proj_in.lora_down.weight"
+check("SDXL input_blocks 不被识别为 Anima 块", sorted(R.block_indices([sdxl_key])), [])
 
 # --------------------------------------------------------------------------- #
 print()

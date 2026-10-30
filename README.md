@@ -1,11 +1,11 @@
-# ComfyUI-LoRAStackAutoTriggers
+﻿# ComfyUI-LoRAStackAutoTriggers
 
 一个 ComfyUI 节点包，含**两个**节点，共用同一套「LoRA 堆叠 + 自动触发词提取 + 可视化选词」：
 
 | 节点 | 作用 |
 |---|---|
 | **LoRA Stack Auto Triggers** | 产出 `LORA_STACK` + 提示词/元数据，交给任意 Apply 节点 |
-| **LoRA Stack Auto Triggers (Anima Remap)** | 同上，但**自己应用** LoRA，并做 Anima 跨代（28 / 40 / 52 层）block 重映射 |
+| **LoRA Stack Apply (Anima Remap)** | 吃 `LORA_STACK` + `MODEL`，**remap 后应用**，输出 `MODEL/CLIP`。非 Anima 场景也能当通用应用器 |
 
 ---
 
@@ -129,69 +129,79 @@
 
 > 从 1.0.0 升级：旧工作流里存的 `:` 依旧按全选执行（行为不变）；新节点默认空值，只取第一条变体。
 
-## 节点二：LoRA Stack Auto Triggers (Anima Remap)
+## 节点二：LoRA Stack Apply (Anima Remap)
 
-与上面的节点共用同一套「4 槽位 + 触发词选择器」，但**额外负责应用**（吃 `MODEL`），并做 Anima 跨代 block 重映射。
+**应用器**：吃 `LORA_STACK` + `MODEL`（+ 可选 `CLIP`），把 stack 里的 LoRA 应用上去；若是 Anima 跨代，先做 block 重映射再应用。
 
-### 为什么需要它
+它是 easy-use「应用LoRA堆」的**替代品**（也顺带解决"没装 easy-use 就没法用本包"的问题）。
 
-Anima 各代是**插入式加深**（不是重训）：
+### 为什么它必须站在"应用节点"的位置上
 
-| 代 | 层数 |
-|---|---|
-| Anima（aestheticV11 / turboV11 等） | **28** |
-| Anima 2.9B | **40**（28 层 + 插入 12 层） |
-| Anima 3.8B（Pro52） | **52**（40 层 + 再插入 12 层） |
+`comfy.sd.load_lora_for_models()` 是**当场**把 LoRA delta 按当前索引写进 ModelPatcher 的。也就是说经过「应用LoRA堆」之后，权重已经按**错误的层号**算好并挂上去了——**下游节点无法反悔**。
+
+所以 remap 只能在"加载 LoRA 之后、应用之前"发生：
 
 ```
-28层:  0  1  2  3  4  5 ...
-40层:  0  1 [2] 3  4 [5] 6  7 [8] ...     [n] = 新插入层
-       ↑  ↑     ↑  ↑     ↑  ↑
-       0  1     2  3     4  5              ← 原始层被挤到后面的索引
+❌ stack → 应用LoRA堆 → [remap 节点]            ← 无效（水已经倒进杯子）
+✅ stack → [LoRA Stack Apply (Anima Remap)]    ← 替代掉应用节点
 ```
 
-LoRA 键里写死了 `blocks.2`；放到 40 层模型上，`blocks.2` **确实存在**（是插入层），所以 ComfyUI 不会报错——但每个块都落在错的层上，**静默错位**。本节点在应用前改写 LoRA 自己的块索引。
+### 接线
+
+```
+Checkpoint ─模型─┐
+           ─CLIP─┤
+LoRA Stack Auto Triggers ─LORA_STACK─→ [LoRA Stack Apply (Anima Remap)] ─模型/CLIP→ 采样器
+```
 
 ### 输入
 
 | 输入 | 说明 |
 |---|---|
-| `model` | 要应用的 Anima 模型（本节点会真的加载并应用 LoRA） |
-| `clip`（可选） | 没有它就忽略 CLIP 权重 |
-| `lora_stack`（可选） | 从别的节点串过来的 LoRA，也会按同样规则 remap 后一并应用 |
-| **`target_model`** | **Auto / Anima (28 layers) / Anima 2.9B (40 layers) / Anima 3.8B (52 layers)** —— 连的模型是哪一代；Auto 按模型层数判断 |
-| **`source_model`** | 同上四个选项 —— **LoRA 是哪一代**；Auto 按 LoRA 自身最高块号推断 |
+| `model` | **必接**。目标模型；Auto 探测目标代就靠它的层数 |
+| `lora_stack` | **必接**。来自任意产出 `LORA_STACK` 的节点（不限于本包） |
+| `clip`（可选） | 不接则所有 CLIP 权重被忽略 |
+| `bypass` | 透传（不应用任何 LoRA），做 A/B 对比用 |
+| `enable_remap` | 关掉 = 纯应用器（不改键）。非 Anima 模型开不开都一样 |
+| `target_model` | Auto / Anima (28 layers) / Anima 2.9B (40 layers) / Anima 3.8B (52 layers) |
+| `source_model` | 同上 —— **LoRA 是哪一代**；Auto 会误判"只改早期层的 LoRA"，拿不准就手选 |
 | `remap_mode` | `Keys only (recommended)` / `Extend to new layers (experimental)` |
-| `extend_strength` | 仅 Extend 模式用；1.0 = 直接复制源块 delta，线性缩放 |
-| `enable_remap` | 关掉即原样应用（做 A/B 对比） |
-
-> **两个下拉都留 Auto 也能用**，但自动判定有已知盲区：一个 40 层的 LoRA 若只改了前 28 层，会被判成 28 层从而被错误重映射。**拿不准就手动选** —— 这正是两个下拉存在的原因。
+| `extend_strength` | 仅 Extend 模式用；1.0 = 原样复制源块 delta，线性缩放 |
+| `weight_multiplier` | 全局倍率，把 stack 里所有权重统一放大/缩小（1.0 = 不变） |
+| `apply_clip` | OFF = 完全不碰文本编码器（所有 CLIP 权重强制 0，仅作用于模型） |
 
 ### 输出
 
-`MODEL` / `CLIP` / `LORA_PROMPT` / `LORA_MetaData` / `LORA_STACK` / `REMAP_INFO`
+`MODEL` / `CLIP` / `REMAP_INFO`
 
 `REMAP_INFO` 逐条写明做了什么：
 
 ```
 target: Anima 2.9B (40 layers)
-zzz_remielle_anima_v2-rift1000: 28->40 remapped (840 moved, 0 dropped)
+applied: 1 lora(s)
+zzz_remielle_anima_v2-rift1000: 28->40 remapped (840 moved, 0 dropped)  [w=0.85, clip=0]
 ```
 
-### 两种模式的区别
+### 两种 remap 模式
 
 | 模式 | 做法 | 效果 |
 |---|---|---|
 | **Keys only**（推荐先用） | 只把块索引搬到正确位置 | 新增的 12 层拿不到该 LoRA 的 delta，**效果比在原版模型上弱** |
-| **Extend** | 额外把每个源块的 delta 复制到"由它插入出来的"新层，×`extend_strength` | 更接近原版强度，但这是 best-effort 猜的（那些层训练时还不存在） |
+| **Extend** | 额外把每个源块的 delta 复制到"由它插入出来的"新层，×`extend_strength` | 更接近原版强度，但是 best-effort 猜的（那些层训练时还不存在） |
 
 ### 与其它 Anima 补丁插件共存
 
-社区另有两个"全局 patch"实现（`ComfyUI-Anima-2.9B-loraPatch`、`ComfyUI-Anima-LoRA-ControlNet-Patch`），它们 monkeypatch 全局 `comfy.lora.load_lora`。本节点**不 monkeypatch**，只改自己加载的那份 state dict；改完后在它们眼里已是"新代原生 LoRA"，因此**不会双重重映射**。装一个就够。
+社区有两个"全局 patch"实现（`ComfyUI-Anima-2.9B-loraPatch`、`ComfyUI-Anima-LoRA-ControlNet-Patch`），它们 monkeypatch 全局 `comfy.lora.load_lora`。本节点**不 monkeypatch**，只改自己加载的那份 state dict；改完后在它们眼里已是"新代原生 LoRA"，因此**不会双重重映射**。装一个就够。
 
 ### 方向限制
 
-只支持"老的 → 新的"（28→40、28→52、40→52）。反过来（52 层 LoRA 用在 28 层模型上）**直接报错**：那些层在模型上根本不存在，静默装一半比报错更糟。
+只支持"老的 → 新的"（28→40、28→52、40→52）。反过来（52 层 LoRA 用在 28 层模型上）**直接报错**：那些层在模型上根本不存在。
+
+### 健壮性
+
+- `NaN` / `Inf` 权重一律按 **0** 处理（条目跳过）。否则 `NaN != 0` 会被判成"启用"，把 NaN 强度灌进模型 → 全灰/全黑图且不报错
+- SDXL 风格的 `input_blocks` / `output_blocks` **不会**被误认成 Anima 块
+- 权重为 0 的条目、`"None"` 条目、空 stack 都会被安全跳过
 
 ## 文件结构
 
@@ -199,8 +209,8 @@ zzz_remielle_anima_v2-rift1000: 28->40 remapped (840 moved, 0 dropped)
 ComfyUI-LoRAStackAutoTriggers/
 ├── __init__.py                  # 入口（注册两个节点 + 路由 + web）
 ├── oplorast_slots.py            # 两个节点共用的槽位/触发词逻辑
-├── oplorast_node.py             # 节点一：LoRAStackAutoTriggers
-├── oplorast_anima_node.py       # 节点二：LoRAStackAutoTriggersAnimaRemap
+├── oplorast_node.py             # 节点一：LoRAStackAutoTriggers（stack 构建）
+├── oplorast_apply.py            # 节点二：LoRAStackApply（应用 + Anima remap）
 ├── anima_arch.py                # Anima 层数映射表（纯数据，可单测）
 ├── anima_remap.py               # 键名识别 / 层数探测 / state dict 重写
 ├── oplorast_utils.py            # 触发词逻辑（移植自 ATW）+ 后端路由

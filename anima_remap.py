@@ -39,7 +39,7 @@ _BLOCK_PATTERNS = (
 # Fallback for unusual spellings; safe because excluded keys are filtered first.
 _FALLBACK_PATTERN = re.compile(r"(_blocks_)(\d+)(_)")
 
-_EXCLUDED_FRAGMENTS = ("llm_adapter",)                  # separate 6-block structure
+_EXCLUDED_FRAGMENTS = ("llm_adapter", "input_blocks", "output_blocks")
 _EXCLUDED_PREFIXES = ("lora_te", "lora_te1", "lora_te2")  # text encoder side
 
 # "up" halves of a LoRA pair: scaling only these keeps the effective delta
