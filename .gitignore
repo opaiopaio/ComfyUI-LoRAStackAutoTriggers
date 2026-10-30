@@ -1,3 +1,4 @@
-loras_tags.json
+﻿loras_tags.json
 __pycache__/
 *.pyc
+_ping.log
