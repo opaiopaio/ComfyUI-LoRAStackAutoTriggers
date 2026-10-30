@@ -1,7 +1,7 @@
 [project]
 name = "comfyui-lorastackautotriggers"
-description = "ComfyUI custom node: LoRA stack with auto trigger-word extraction (civitai + safetensors metadata)"
-version = "1.1.0"
+description = "ComfyUI custom node: LoRA stack with auto trigger-word extraction, plus an Anima cross-generation remap node (28/40/52 layers)"
+version = "1.2.0"
 license = "MIT"
 requires-python = ">=3.10"
 dependencies = ["requests"]

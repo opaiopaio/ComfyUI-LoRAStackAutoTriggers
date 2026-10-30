@@ -15,7 +15,11 @@
 import { app } from "../../../scripts/app.js";
 import { api } from "../../../scripts/api.js";
 
-const NODE_NAME = "LoRA Stack Auto Triggers";
+// Both nodes in this package share the same slot widgets and picker.
+const NODE_NAMES = [
+    "LoRA Stack Auto Triggers",
+    "LoRA Stack Auto Triggers (Anima Remap)",
+];
 const ROUTE = "/lorastack/trigger_words";
 const SLOTS = 4;
 const META_RENDER_LIMIT = 400;
@@ -195,11 +199,12 @@ async function fetchTags(loraName, force) {
         return {
             variants: data.variants || [],
             meta: data.meta || [],
+            blocks: data.blocks || null,
             ok: !!data.ok,
         };
     } catch (e) {
         console.error(LOG, "fetch error", e);
-        return { variants: [], meta: [], ok: false };
+        return { variants: [], meta: [], blocks: null, ok: false };
     }
 }
 
@@ -208,10 +213,11 @@ async function fetchTags(loraName, force) {
 // --------------------------------------------------------------------------- //
 function renderSummary(node, i) {
     const cache = (node.opLoraTagsCache = node.opLoraTagsCache || {});
-    const entry = cache[i] || { variants: [], meta: [], ok: true };
+    const entry = cache[i] || { variants: [], meta: [], blocks: null, ok: true };
     const selW = getWidget(node, `trigger_selector_${i}`);
     const raw = selW ? selW.value : "";
     const resolved = resolveText(raw, entry.variants, entry.meta);
+    const layers = entry.blocks ? `${entry.blocks}层 · ` : "";
 
     let text;
     if (!entry.ok) {
@@ -219,10 +225,10 @@ function renderSummary(node, i) {
     } else if (!resolved) {
         const vc = (entry.variants || []).length;
         const mc = (entry.meta || []).length;
-        text = `未选择 · 变体 ${vc} / 训练标签 ${mc} — 点 ⚙ 打开选择器`;
+        text = `${layers}未选择 · 变体 ${vc} / 训练标签 ${mc} — 点 ⚙ 打开选择器`;
     } else {
         const segs = splitSegments(resolved);
-        text = `已选 ${segs.length} 段 / ${resolved.length} 字：${truncate(resolved, 70)}`;
+        text = `${layers}已选 ${segs.length} 段 / ${resolved.length} 字：${truncate(resolved, 70)}`;
     }
     setWidgetValue(node, `trigger_preview_${i}`, text);
     if (node.setDirtyCanvas) node.setDirtyCanvas(true, true);
@@ -623,7 +629,7 @@ function bindForceFetch(node) {
 app.registerExtension({
     name: "lorastackautotriggers.picker",
     async beforeRegisterNodeDef(nodeType, nodeData) {
-        if (nodeData.name !== NODE_NAME) return;
+        if (!NODE_NAMES.includes(nodeData.name)) return;
         const onNodeCreated = nodeType.prototype.onNodeCreated;
         nodeType.prototype.onNodeCreated = function () {
             const r = onNodeCreated ? onNodeCreated.apply(this, arguments) : undefined;

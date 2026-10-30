@@ -301,6 +301,21 @@ def split_segments(text):
 # --------------------------------------------------------------------------- #
 # Backend route
 # --------------------------------------------------------------------------- #
+def _peek_block_count(lora_name):
+    """Anima generation of this LoRA (28 / 40 / 52 layers) for the UI badge.
+
+    Read from the safetensors header only; never fatal.
+    """
+    try:
+        from anima_arch import bucket_block_count
+        from anima_remap import peek_lora_block_count
+
+        path = folder_paths.get_full_path("loras", lora_name)
+        return bucket_block_count(peek_lora_block_count(path))
+    except Exception:
+        return None
+
+
 def setup_lora_trigger_routes():
     """Register /lorastack/trigger_words on the ComfyUI PromptServer."""
     from server import PromptServer
@@ -313,7 +328,7 @@ def setup_lora_trigger_routes():
         lora_name = request.rel_url.query.get("lora_name", "")
         force = request.rel_url.query.get("force", "false").lower() == "true"
         empty = {
-            "tags": [], "variants": [], "meta": [],
+            "tags": [], "variants": [], "meta": [], "blocks": None,
             "civitai_count": 0, "meta_count": 0, "ok": True,
         }
         if not lora_name or lora_name == "None":
@@ -326,6 +341,7 @@ def setup_lora_trigger_routes():
                     "tags": flat,
                     "variants": st["variants"],
                     "meta": st["meta"],
+                    "blocks": _peek_block_count(lora_name),
                     "civitai_count": len(st["variants"]),
                     "meta_count": len(st["meta"]),
                     "ok": True,
@@ -335,7 +351,7 @@ def setup_lora_trigger_routes():
             print(f"{_LOG} route error: {e}")
             return web.json_response(
                 {
-                    "tags": [], "variants": [], "meta": [],
+                    "tags": [], "variants": [], "meta": [], "blocks": None,
                     "civitai_count": 0, "meta_count": 0,
                     "ok": False, "error": str(e),
                 }
