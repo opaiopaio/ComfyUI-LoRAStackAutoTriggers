@@ -366,6 +366,56 @@ sdxl_key = "lora_unet_input_blocks_5_1_proj_in.lora_down.weight"
 check("SDXL input_blocks 不被识别为 Anima 块", sorted(R.block_indices([sdxl_key])), [])
 
 # --------------------------------------------------------------------------- #
+# 7. 普通应用节点（无 Anima 选项）+ 双语
+# --------------------------------------------------------------------------- #
+print("\n=== 7. 普通应用节点 + i18n ===")
+
+basic = APPLY.LoRAStackApplyBasic()
+APPLIED.clear()
+b_model, b_clip, b_info = basic.apply(
+    model=FakeModel(40), bypass=False, weight_multiplier=1.0, apply_clip=True,
+    clip=None, lora_stack=[("mylora.safetensors", 0.5, 0.0)],
+)
+check("basic: 应用 1 次", len(APPLIED), 1)
+check("basic: 不做 remap（保留 28 层块位）", sorted(R.block_indices(APPLIED[0]["keys"])), list(range(28)))
+check_true("basic: 信息里写明应用数量", "applied: 1" in b_info, b_info)
+
+APPLIED.clear()
+basic.apply(model=FakeModel(40), bypass=True, weight_multiplier=1.0, apply_clip=True,
+            clip=None, lora_stack=[("mylora.safetensors", 0.5, 0.0)])
+check("basic: bypass 时不加载", len(APPLIED), 0)
+
+# 端口顺序：model 必接，clip / lora_stack 都是 optional（clip 在前）
+req = list(APPLY.LoRAStackApply.INPUT_TYPES()["required"].keys())
+opt = list(APPLY.LoRAStackApply.INPUT_TYPES()["optional"].keys())
+check("anima: model 在 required 首位", req[0], "model")
+check("anima: optional 顺序 = clip, lora_stack", opt, ["clip", "lora_stack"])
+req_b = list(APPLY.LoRAStackApplyBasic.INPUT_TYPES()["required"].keys())
+opt_b = list(APPLY.LoRAStackApplyBasic.INPUT_TYPES()["optional"].keys())
+check("basic: model 在 required 首位", req_b[0], "model")
+check("basic: optional 顺序 = clip, lora_stack", opt_b, ["clip", "lora_stack"])
+
+# 两个节点的 registry key 必须互不相同且稳定
+check("registry keys", sorted(APPLY.NODE_CLASS_MAPPINGS.keys()), ["LoRAStackApply", "LoRAStackApplyBasic"])
+
+# i18n：强制切换语言后取词正确
+import importlib
+import i18n as I18N
+
+check_true("i18n: 当前语言能取到译文", I18N.t("node.stack") != "node.stack")
+os.environ["OPNODES_LANG"] = "zh"
+importlib.reload(I18N)
+check("i18n zh: category", I18N.t("category"), "LoRA 堆")
+check("i18n zh: 带占位符", I18N.t("tip.lora_on", i=3), "启用/停用第 3 个 LoRA")
+os.environ["OPNODES_LANG"] = "en"
+importlib.reload(I18N)
+check("i18n en: category", I18N.t("category"), "LoRA Stack")
+check("i18n en: 带占位符", I18N.t("tip.lora_on", i=3), "Enable/disable LoRA 3")
+del os.environ["OPNODES_LANG"]
+importlib.reload(I18N)
+check_true("i18n: 未知 key 回退为 key 本身", I18N.t("no.such.key") == "no.such.key")
+
+# --------------------------------------------------------------------------- #
 print()
 print("RESULT:", "ALL PASS" if OK else "SOME FAILED")
 sys.exit(0 if OK else 1)

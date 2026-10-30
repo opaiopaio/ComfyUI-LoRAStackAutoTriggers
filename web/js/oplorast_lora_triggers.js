@@ -15,6 +15,87 @@
 import { app } from "../../../scripts/app.js";
 import { api } from "../../../scripts/api.js";
 
+// --------------------------------------------------------------------------- //
+// i18n: follows the browser/system language (zh* -> Chinese, otherwise English)
+// --------------------------------------------------------------------------- //
+const LANG_TAG = ((navigator.language || navigator.userLanguage || "en") + "").toLowerCase();
+const IS_ZH = LANG_TAG.indexOf("zh") === 0;
+
+const S = IS_ZH
+    ? {
+          layers: (n) => `${n}层 · `,
+          wordCount: (n) => `${n} 词`,
+          fetchFailed: "⚠ 拉取失败（可开 force_fetch 重试）",
+          notSelected: (layers, vc, mc) =>
+              `${layers}未选择 · 变体 ${vc} / 训练标签 ${mc} — 点 ⚙ 打开选择器`,
+          selected: (layers, n, chars, preview) =>
+              `${layers}已选 ${n} 段 / ${chars} 字：${preview}`,
+          pickBtn: (i) => `⚙ 触发词 ${i}`,
+          dialogTitle: (i, name) => `触发词 · LoRA ${i} — ${name}`,
+          tabVariants: (n) => `变体 ${n}`,
+          tabMeta: (n) => `训练标签 ${n}`,
+          tabFree: "自由编辑",
+          noVariants:
+              "该 LoRA 没有从 civitai 拉到变体。可在节点上勾选 force_fetch 后重新打开本窗口。",
+          variantHint:
+              "点变体 = 载入；下方片段点一下即剔除（如 see-through mouth mask），再点恢复。",
+          metaHint: "训练集标签统计（多数与角色无关，仅作补充）。点击追加到结果。",
+          noMeta: "无训练标签。",
+          moreHits: (n) => `还有 ${n} 条，请用搜索缩小范围。`,
+          noMatch: "没有匹配的标签。",
+          manualEdited: "（已手动编辑）点右侧按钮可按当前文本重建片段开关",
+          rebuild: "↻ 重建片段",
+          chipOff: "点击剔除该片段",
+          chipOn: "点击恢复该片段",
+          searchPlaceholder: "搜索标签…（例：mask / hair / dress）",
+          freeHint:
+              S.freeHint,
+          countLine: (n, chars) => `已选 ${n} 段 · ${chars} 字`,
+          selInfo: (n) => `选区 ${n} 字`,
+          noSelection: "未划选",
+          applySelection: "应用选区",
+          applyAll: "应用全部",
+          cancel: "取消",
+      }
+    : {
+          layers: (n) => `${n} layers · `,
+          wordCount: (n) => (n === 1 ? "1 word" : `${n} words`),
+          fetchFailed: "⚠ fetch failed (enable force_fetch to retry)",
+          notSelected: (layers, vc, mc) =>
+              `${layers}nothing selected · ${vc} variant(s) / ${mc} training tag(s) — click ⚙ to open the picker`,
+          selected: (layers, n, chars, preview) =>
+              `${layers}${n} segment(s) / ${chars} chars: ${preview}`,
+          pickBtn: (i) => `⚙ Triggers ${i}`,
+          dialogTitle: (i, name) => `Triggers · LoRA ${i} — ${name}`,
+          tabVariants: (n) => `Variants ${n}`,
+          tabMeta: (n) => `Training tags ${n}`,
+          tabFree: "Free edit",
+          noVariants:
+              "No civitai variants for this LoRA. Tick force_fetch on the node, then reopen this window.",
+          variantHint:
+              "Click a variant to load it; click a segment chip to drop it (e.g. see-through mouth mask), click again to restore.",
+          metaHint:
+              "Training-set tag statistics (mostly unrelated to the character; supplementary). Click to append.",
+          noMeta: "No training tags.",
+          moreHits: (n) => `${n} more — narrow it down with the search box.`,
+          noMatch: "No matching tags.",
+          manualEdited:
+              "(edited manually) use the button on the right to rebuild segment toggles from the current text",
+          rebuild: "↻ Rebuild segments",
+          chipOff: "Click to drop this segment",
+          chipOn: "Click to restore this segment",
+          searchPlaceholder: "Search tags… (e.g. mask / hair / dress)",
+          freeHint:
+              'This is the text that will be injected; edit it freely. To take only part of it, select it with the mouse and press "Apply selection".',
+          countLine: (n, chars) => `${n} segment(s) · ${chars} chars`,
+          selInfo: (n) => `selection ${n} chars`,
+          noSelection: "no selection",
+          applySelection: "Apply selection",
+          applyAll: "Apply all",
+          cancel: "Cancel",
+      };
+
+
 // Nodes in this package that carry the slot widgets + picker.
 // (The applier node has no slots, so it is not listed here.)
 const NODE_NAMES = ["LoRA Stack Auto Triggers"];
@@ -215,18 +296,18 @@ function renderSummary(node, i) {
     const selW = getWidget(node, `trigger_selector_${i}`);
     const raw = selW ? selW.value : "";
     const resolved = resolveText(raw, entry.variants, entry.meta);
-    const layers = entry.blocks ? `${entry.blocks}层 · ` : "";
+    const layers = entry.blocks ? S.layers(entry.blocks) : "";
 
     let text;
     if (!entry.ok) {
-        text = "⚠ 拉取失败（可开 force_fetch 重试）";
+        text = S.fetchFailed;
     } else if (!resolved) {
         const vc = (entry.variants || []).length;
         const mc = (entry.meta || []).length;
-        text = `${layers}未选择 · 变体 ${vc} / 训练标签 ${mc} — 点 ⚙ 打开选择器`;
+        text = S.notSelected(layers, vc, mc);
     } else {
         const segs = splitSegments(resolved);
-        text = `${layers}已选 ${segs.length} 段 / ${resolved.length} 字：${truncate(resolved, 70)}`;
+        text = S.selected(layers, segs.length, resolved.length, truncate(resolved, 70));
     }
     setWidgetValue(node, `trigger_preview_${i}`, text);
     if (node.setDirtyCanvas) node.setDirtyCanvas(true, true);
@@ -296,9 +377,9 @@ function openPicker(node, i) {
     // ---- counters
     const refreshCount = () => {
         const segs = splitSegments(ta.value);
-        countEl.textContent = `已选 ${segs.length} 段 · ${ta.value.length} 字`;
+        countEl.textContent = S.countLine(segs.length, ta.value.length);
         const a = ta.selectionStart, b = ta.selectionEnd;
-        selInfoEl.textContent = b > a ? `选区 ${b - a} 字` : "未划选";
+        selInfoEl.textContent = b > a ? S.selInfo(b - a) : S.noSelection;
         if (b > a) applySelBtn.removeAttribute("disabled");
         else applySelBtn.setAttribute("disabled", "");
     };
@@ -317,12 +398,12 @@ function openPicker(node, i) {
             chipsWrap.appendChild(
                 el("span", {
                     class: "opls-hint",
-                    text: "（已手动编辑）点右侧按钮可按当前文本重建片段开关",
+                    text: S.manualEdited,
                 })
             );
             const rebuild = el("span", {
                 class: "opls-chip",
-                text: "↻ 重建片段",
+                text: S.rebuild,
                 onclick: () => {
                     chipState = splitSegments(ta.value).map((t) => ({ text: t, on: true }));
                     baseVariant = -1;
@@ -337,7 +418,7 @@ function openPicker(node, i) {
                 el("span", {
                     class: "opls-chip" + (c.on ? "" : " off"),
                     text: c.text,
-                    title: c.on ? "点击剔除该片段" : "点击恢复该片段",
+                    title: c.on ? S.chipOff : S.chipOn,
                     onclick: () => {
                         chipState[idx].on = !chipState[idx].on;
                         syncFromChips();
@@ -362,7 +443,7 @@ function openPicker(node, i) {
             variantList.appendChild(
                 el("div", {
                     class: "opls-hint",
-                    text: "该 LoRA 没有从 civitai 拉到变体。可在节点上勾选 force_fetch 后重新打开本窗口。",
+                    text: S.noVariants,
                 })
             );
             return;
@@ -381,7 +462,7 @@ function openPicker(node, i) {
                 [
                     el("span", { text: idx === baseVariant ? "●" : "○" }),
                     el("span", { class: "opls-var-name", text: head }),
-                    el("span", { class: "opls-var-count", text: `${segs.length} 词` }),
+                    el("span", { class: "opls-var-count", text: S.wordCount(segs.length) }),
                     el("span", { class: "opls-var-prev", text: rest }),
                 ]
             );
@@ -391,7 +472,7 @@ function openPicker(node, i) {
             el("div", {
                 class: "opls-hint",
                 style: { marginTop: "8px" },
-                text: "点变体 = 载入；下方片段点一下即剔除（如 see-through mouth mask），再点恢复。",
+                text: S.variantHint,
             })
         );
         variantList.appendChild(chipsWrap);
@@ -409,11 +490,11 @@ function openPicker(node, i) {
             el("div", {
                 class: "opls-hint",
                 style: { marginBottom: "6px" },
-                text: "训练集标签统计（多数与角色无关，仅作补充）。点击追加到结果。",
+                text: S.metaHint,
             })
         );
         if (meta.length === 0) {
-            metaList.appendChild(el("div", { class: "opls-hint", text: "无训练标签。" }));
+            metaList.appendChild(el("div", { class: "opls-hint", text: S.noMeta }));
             return;
         }
         const list = el("div", { class: "opls-taglist" });
@@ -437,12 +518,12 @@ function openPicker(node, i) {
             metaList.appendChild(
                 el("div", {
                     class: "opls-hint",
-                    text: `还有 ${hits.length - META_RENDER_LIMIT} 条，请用搜索缩小范围。`,
+                    text: S.moreHits(hits.length - META_RENDER_LIMIT),
                 })
             );
         }
         if (f && hits.length === 0) {
-            metaList.appendChild(el("div", { class: "opls-hint", text: "没有匹配的标签。" }));
+            metaList.appendChild(el("div", { class: "opls-hint", text: S.noMatch }));
         }
     };
 
@@ -450,15 +531,15 @@ function openPicker(node, i) {
     const freeBox = el("div", {
         class: "opls-hint",
         text:
-            "这是最终要注入的文本，可直接编辑。想只取其中一段：用鼠标划选后点「应用选区」。",
+            S.freeHint,
     });
 
     // ---- tabs
     const tabsBar = el("div", { class: "opls-tabs" });
     const views = [
-        { key: "var", label: `变体 ${variants.length}`, node: variantList },
-        { key: "meta", label: `训练标签 ${meta.length}`, node: metaBox },
-        { key: "free", label: "自由编辑", node: freeBox },
+        { key: "var", label: S.tabVariants(variants.length), node: variantList },
+        { key: "meta", label: S.tabMeta(meta.length), node: metaBox },
+        { key: "free", label: S.tabFree, node: freeBox },
     ];
     let activeKey = variants.length ? "var" : "free";
 
@@ -487,7 +568,7 @@ function openPicker(node, i) {
     // input keeps focus while typing)
     const search = el("input", {
         class: "opls-search",
-        placeholder: "搜索标签…（例：mask / hair / dress）",
+        placeholder: S.searchPlaceholder,
     });
     search.addEventListener("input", () => drawMeta(search.value));
     metaBox.appendChild(search);
@@ -506,7 +587,7 @@ function openPicker(node, i) {
     // ---- footer buttons
     const applySelBtn = el("div", {
         class: "opls-btn",
-        text: "应用选区",
+        text: S.applySelection,
         onclick: () => {
             const a = ta.selectionStart, b = ta.selectionEnd;
             if (b > a) apply(ta.value.slice(a, b).trim());
@@ -514,12 +595,12 @@ function openPicker(node, i) {
     });
     const applyAllBtn = el("div", {
         class: "opls-btn primary",
-        text: "应用全部",
+        text: S.applyAll,
         onclick: () => apply(ta.value.trim()),
     });
     const cancelBtn = el("div", {
         class: "opls-btn",
-        text: "取消",
+        text: S.cancel,
         onclick: close,
     });
 
@@ -536,7 +617,7 @@ function openPicker(node, i) {
     const head = el("div", { class: "opls-head" }, [
         el("div", {
             class: "opls-title",
-            text: `触发词 · LoRA ${i} — ${truncate(String(loraName), 60)}`,
+            text: S.dialogTitle(i, truncate(String(loraName), 60)),
         }),
         el("div", { class: "opls-x", text: "✕", onclick: close }),
     ]);
@@ -579,7 +660,7 @@ function hideWidget(w) {
 
 function addSlotButton(node, i) {
     const clipW = getWidget(node, `clip_weight_${i}`);
-    const btn = node.addWidget("button", `⚙ 触发词 ${i}`, null, () => openPicker(node, i));
+    const btn = node.addWidget("button", S.pickBtn(i), null, () => openPicker(node, i));
     // move the button right below the CLIP weight of this slot
     const from = node.widgets.indexOf(btn);
     if (from >= 0) node.widgets.splice(from, 1);

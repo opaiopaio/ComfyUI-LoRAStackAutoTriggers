@@ -1,12 +1,12 @@
-# ComfyUI-LoRAStackAutoTriggers — base node
+# ComfyUI-LoRAStackAutoTriggers — stack builder node
 #
-# A LoRA stacker that pulls trigger words automatically (civitai + safetensors
-# metadata) and lets you pick them with a visual dialog, then hands the stack
-# to any Apply node.
+# Pulls trigger words automatically (civitai + safetensors metadata), lets you
+# pick them with a visual dialog, and emits a LORA_STACK for any applier (this
+# pack ships `LoRA Stack Apply` / `LoRA Stack Apply (Anima Remap)`).
 #
 # Model & CLIP weights are independent: clip_weight = 0 means "no CLIP effect"
 # (model still applies); a slot is active when ON + name selected +
-# (model_weight != 0 OR clip_weight != 0).
+# (model_weight != 0 OR clip_weight != 0). NaN weights count as 0.
 #
 # `trigger_selector_i` accepts, in priority order:
 #   ""        -> the first civitai variant (safe default, not "everything")
@@ -14,8 +14,9 @@
 #   [a, b]    -> JSON list
 #   0, 3, 5:8 -> legacy slice syntax over variants+meta (old workflows)
 #
-# Slot definitions and trigger resolution live in oplorast_slots.py so this
-# node and the (Anima Remap) variant share exactly one implementation.
+# Slot definitions and trigger resolution live in oplorast_slots.py so every
+# node in the pack shares exactly one implementation.
+from i18n import t
 from oplorast_slots import (
     add_slot_inputs,
     build_metadata,
@@ -35,44 +36,38 @@ class LoRAStackAutoTriggers:
 
         inputs["optional"]["lora_stack"] = (
             "LORA_STACK",
-            {"tooltip": "Existing LoRA stack to extend (chain more nodes here)"},
+            {"tooltip": t("tip.lora_stack_in")},
         )
         inputs["optional"]["lora_prompt"] = (
             "STRING",
-            {"default": "", "tooltip": "Existing LoRA prompt to extend"},
+            {"default": "", "tooltip": t("tip.lora_prompt")},
         )
         inputs["optional"]["lora_metadata"] = (
             "STRING",
-            {"default": "", "tooltip": "Existing LoRA metadata to extend"},
+            {"default": "", "tooltip": t("tip.lora_metadata")},
         )
 
         add_slot_inputs(inputs)
 
         inputs["required"]["save_hash"] = (
             "BOOLEAN",
-            {"default": False, "tooltip": "Include SHA256[:12] in metadata"},
+            {"default": False, "tooltip": t("tip.save_hash")},
         )
         inputs["required"]["force_fetch"] = (
             "BOOLEAN",
-            {"default": False, "tooltip": "Force re-fetch from civitai"},
+            {"default": False, "tooltip": t("tip.force_fetch")},
         )
         inputs["required"]["fallback_to_filename"] = (
             "BOOLEAN",
-            {
-                "default": True,
-                "tooltip": (
-                    "No trigger words found -> output <lora:name:weight> as fallback; "
-                    "OFF -> skip that lora from the prompt"
-                ),
-            },
+            {"default": True, "tooltip": t("tip.fallback")},
         )
         return inputs
 
     RETURN_TYPES = ("LORA_STACK", "STRING", "STRING")
     RETURN_NAMES = ("LORA_STACK", "LORA_PROMPT", "LORA_MetaData")
     FUNCTION = "lora_stacker"
-    CATEGORY = "LoRA Stack"
-    DESCRIPTION = "LoRA stack with auto trigger-word extraction and picker UI."
+    CATEGORY = t("category")
+    DESCRIPTION = t("desc.stack")
 
     def lora_stacker(
         self,
@@ -109,10 +104,12 @@ class LoRAStackAutoTriggers:
         )
 
 
+# NOTE: the registry key ("LoRA Stack Auto Triggers") must stay stable -- it is
+# what saved workflows reference.
 NODE_CLASS_MAPPINGS = {
     "LoRA Stack Auto Triggers": LoRAStackAutoTriggers,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "LoRA Stack Auto Triggers": "LoRA Stack Auto Triggers",
+    "LoRA Stack Auto Triggers": t("node.stack"),
 }

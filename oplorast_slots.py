@@ -21,6 +21,7 @@ from typing import Iterator, List, Optional, Tuple
 
 import folder_paths
 
+from i18n import t
 from oplorast_utils import (
     get_structured_tags,
     resolve_selection,
@@ -56,57 +57,40 @@ def add_slot_inputs(inputs: dict, slot_count: int = SLOT_COUNT) -> None:
     for i in range(1, slot_count + 1):
         required[f"lora_{i}"] = (
             "BOOLEAN",
-            {"default": False, "tooltip": f"Enable/disable LoRA {i}"},
+            {"default": False, "tooltip": t("tip.lora_on", i=i)},
         )
         required[f"lora_name_{i}"] = (
             loras,
-            {"tooltip": f"Select LoRA model {i}"},
+            {"tooltip": t("tip.lora_name", i=i)},
         )
         required[f"model_weight_{i}"] = (
             "FLOAT",
             {
                 "default": 1.0, "min": -10.0, "max": 10.0, "step": 0.01,
-                "tooltip": f"Model (U-Net) weight for LoRA {i}; 0 = no model effect",
+                "tooltip": t("tip.model_weight", i=i),
             },
         )
         required[f"clip_weight_{i}"] = (
             "FLOAT",
             {
                 "default": 1.0, "min": -10.0, "max": 10.0, "step": 0.01,
-                "tooltip": (
-                    f"CLIP (text encoder) weight for LoRA {i}; "
-                    "0 = no CLIP effect (model still applies)"
-                ),
+                "tooltip": t("tip.clip_weight", i=i),
             },
         )
         required[f"trigger_selector_{i}"] = (
             "STRING",
-            {
-                "default": "",
-                "tooltip": (
-                    f"Trigger text for LoRA {i}. Leave empty to use the first "
-                    "civitai variant. Use the \u2699 picker to choose/modify. "
-                    "Free text is injected verbatim; legacy slice syntax "
-                    "(0, 3, 5:8, :) still works."
-                ),
-            },
+            {"default": "", "tooltip": t("tip.selector", i=i)},
         )
         required[f"trigger_weight_{i}"] = (
             "FLOAT",
             {
                 "default": 1.0, "min": -10.0, "max": 10.0, "step": 0.01,
-                "tooltip": (
-                    f"Wraps every selected segment as (seg:weight) for LoRA {i}; "
-                    "1.0 = no wrapping"
-                ),
+                "tooltip": t("tip.trigger_weight", i=i),
             },
         )
         required[f"trigger_preview_{i}"] = (
             "STRING",
-            {
-                "default": "",
-                "tooltip": f"One-line summary for LoRA {i} (filled by the UI)",
-            },
+            {"default": "", "tooltip": t("tip.preview", i=i)},
         )
 
 

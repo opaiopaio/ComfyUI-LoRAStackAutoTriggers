@@ -1,17 +1,19 @@
-"""Stack applier for this node pack.
+"""Stack appliers for this node pack.
 
-Two reasons this exists:
+Why this file exists:
 
 1. This pack used to only BUILD a LORA_STACK, so anyone without a third-party
-   "apply LoRA stack" node could not use it at all.
-2. The Anima cross-generation remap has to happen at one specific moment:
-   after the LoRA file is loaded, and before its deltas are folded into the
-   model by comfy.sd.load_lora_for_models. A node placed *after* an applier
-   cannot fix anything -- the weights are already applied at that point with
-   the wrong block indices.
+   "apply LoRA stack" node could not use it at all. `LoRAStackApplyBasic` is the
+   plain applier for that.
+2. The Anima cross-generation remap has to happen at one specific moment: after
+   the LoRA file is loaded, before its deltas are folded into the model by
+   comfy.sd.load_lora_for_models. A node placed *after* an applier cannot fix
+   anything. `LoRAStackApply` (Anima Remap) is the applier that does the remap.
 
-So this node sits where the applier sits: LORA_STACK + MODEL (+CLIP) in,
-MODEL/CLIP out.
+Socket order note: both nodes declare `model` as required and `clip`/`lora_stack`
+as optional in that order, so the canvas shows model -> clip -> lora_stack.
+(ComfyUI always draws required inputs before optional ones, so `lora_stack`
+cannot sit between them unless it is optional too.)
 """
 
 from __future__ import annotations
@@ -36,6 +38,7 @@ from anima_remap import (
     extend_state_dict,
     remap_state_dict,
 )
+from i18n import t
 
 REMAP_MODE_KEYS = "Keys only (recommended)"
 REMAP_MODE_EXTEND = "Extend to new layers (experimental)"
@@ -46,9 +49,9 @@ REMAP_MODES = [REMAP_MODE_KEYS, REMAP_MODE_EXTEND]
 # helpers
 # --------------------------------------------------------------------------- #
 def _num(value, default=0.0):
-    """Coerce to a finite float. NaN/Inf (which a widget can end up holding
-    after a paste/clone) become `default` -- a NaN strength silently poisons
-    the model and shows up as a grey/black image with no error."""
+    """Coerce to a finite float. NaN/Inf (which a widget can hold after a
+    paste/clone) become `default` -- a NaN strength silently poisons the model
+    and shows up as a grey/black image with no error."""
     try:
         f = float(value)
     except (TypeError, ValueError):
@@ -57,15 +60,16 @@ def _num(value, default=0.0):
 
 
 def _unpack_entry(entry):
-    """LORA_STACK entry -> (name, w_model, w_clip), or None to skip."""
+    """LORA_STACK entry -> (name, w_model, w_clip), or None to skip.
+
+    A missing weight means "1.0"; a present-but-NaN/Inf weight means "garbage"
+    and becomes 0 so the entry is skipped instead of poisoning the model.
+    """
     if not isinstance(entry, (list, tuple)) or not entry:
         return None
     name = entry[0]
     if not isinstance(name, str) or not name or name == "None":
         return None
-    # A missing weight means "1.0"; a present-but-NaN/Inf weight means
-    # "garbage" and becomes 0 so the entry is skipped instead of poisoning
-    # the model with NaN strengths.
     w_model = _num(entry[1], 0.0) if len(entry) > 1 else 1.0
     w_clip = _num(entry[2], 0.0) if len(entry) > 2 else w_model
     return name, w_model, w_clip
@@ -79,13 +83,14 @@ def _load_and_remap(name, target_count, enable_remap, source_choice, remap_mode,
         raise RuntimeError(f"[LoRA Stack Apply] LoRA file not found: {name}")
 
     sd = comfy.utils.load_torch_file(path, safe_load=True)
-    detected = detect_lora_block_count(sd.keys())
-    source_count = resolve_dropdown(source_choice) or detected
 
     if not enable_remap:
         return sd, f"{stem}: applied as-is (remap disabled)"
     if not target_count:
         return sd, f"{stem}: applied as-is (target generation unknown)"
+
+    detected = detect_lora_block_count(sd.keys())
+    source_count = resolve_dropdown(source_choice) or detected
     if not source_count:
         return sd, f"{stem}: applied as-is (no block keys detected)"
 
@@ -118,136 +123,179 @@ def _load_and_remap(name, target_count, enable_remap, source_choice, remap_mode,
     )
 
 
+def _apply_stack(
+    model,
+    clip,
+    lora_stack,
+    *,
+    enable_remap,
+    target_model,
+    source_model,
+    remap_mode,
+    extend_strength,
+    weight_multiplier,
+    apply_clip,
+):
+    """Shared body for both appliers. Returns (model, clip, info_text)."""
+    multiplier = _num(weight_multiplier, 1.0)
+    target_count = None
+    if enable_remap:
+        target_count = resolve_dropdown(target_model) or detect_model_block_count(model)
+
+    info = []
+    if enable_remap:
+        info.append(f"target: {describe_count(target_count)}")
+    else:
+        info.append("remap: disabled")
+
+    out_model = model
+    out_clip = clip
+    applied = 0
+    stack = list(lora_stack or [])
+    if not stack:
+        info.append("applied: 0 lora(s) (empty stack)")
+
+    for entry in stack:
+        unpacked = _unpack_entry(entry)
+        if unpacked is None:
+            continue
+        name, w_model, w_clip = unpacked
+
+        w_model = _num(w_model * multiplier, 0.0)
+        w_clip = _num(w_clip * multiplier, 0.0)
+        if not apply_clip or out_clip is None:
+            w_clip = 0.0
+        if w_model == 0.0 and w_clip == 0.0:
+            info.append(f"{Path(name).stem}: skipped (weights are 0)")
+            continue
+
+        sd, line = _load_and_remap(
+            name, target_count, enable_remap, source_model, remap_mode, extend_strength
+        )
+        out_model, out_clip = comfy.sd.load_lora_for_models(
+            out_model, out_clip, sd, w_model, w_clip
+        )
+        applied += 1
+        info.append(f"{line}  [w={w_model:g}, clip={w_clip:g}]")
+
+    if stack:
+        info.insert(1, f"applied: {applied} lora(s)")
+    return out_model, out_clip, "\n".join(info)
+
+
 # --------------------------------------------------------------------------- #
-# node
+# Plain applier (no Anima options)
 # --------------------------------------------------------------------------- #
-class LoRAStackApply:
-    """Apply a LORA_STACK to MODEL/CLIP, with optional Anima block remapping."""
+class LoRAStackApplyBasic:
+    """Apply a LORA_STACK to MODEL/CLIP. No remap, no Anima options."""
 
     @classmethod
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "model": (
-                    "MODEL",
+                "model": ("MODEL", {"tooltip": t("tip.model")}),
+                "bypass": ("BOOLEAN", {"default": False, "tooltip": t("tip.bypass")}),
+                "weight_multiplier": (
+                    "FLOAT",
                     {
-                        "tooltip": (
-                            "Model to apply the stack to. Its layer count is used to "
-                            "detect the target Anima generation."
-                        )
+                        "default": 1.0, "min": 0.0, "max": 4.0, "step": 0.05,
+                        "tooltip": t("tip.weight_multiplier"),
                     },
                 ),
-                "lora_stack": (
-                    "LORA_STACK",
-                    {
-                        "tooltip": (
-                            "Stack to apply (from LoRA Stack Auto Triggers or any other "
-                            "node that produces LORA_STACK)."
-                        )
-                    },
-                ),
-                "bypass": (
+                "apply_clip": (
                     "BOOLEAN",
-                    {
-                        "default": False,
-                        "tooltip": "Pass MODEL/CLIP through untouched (quick A/B toggle)",
-                    },
+                    {"default": True, "tooltip": t("tip.apply_clip")},
                 ),
+            },
+            "optional": {
+                "clip": ("CLIP", {"tooltip": t("tip.clip_optional")}),
+                "lora_stack": ("LORA_STACK", {"tooltip": t("tip.lora_stack_apply")}),
+            },
+        }
+
+    RETURN_TYPES = ("MODEL", "CLIP", "STRING")
+    RETURN_NAMES = ("MODEL", "CLIP", "INFO")
+    FUNCTION = "apply"
+    CATEGORY = t("category")
+    DESCRIPTION = t("desc.apply")
+
+    def apply(self, model, bypass, weight_multiplier, apply_clip, clip=None, lora_stack=None):
+        if bypass:
+            return (model, clip, "bypassed (MODEL/CLIP passed through untouched)")
+        return _apply_stack(
+            model, clip, lora_stack,
+            enable_remap=False,
+            target_model=AUTO_LABEL,
+            source_model=AUTO_LABEL,
+            remap_mode=REMAP_MODE_KEYS,
+            extend_strength=0.0,
+            weight_multiplier=weight_multiplier,
+            apply_clip=apply_clip,
+        )
+
+
+# --------------------------------------------------------------------------- #
+# Anima remap applier
+# --------------------------------------------------------------------------- #
+class LoRAStackApply:
+    """Apply a LORA_STACK to MODEL/CLIP, remapping Anima block indices."""
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "model": ("MODEL", {"tooltip": t("tip.model")}),
+                "bypass": ("BOOLEAN", {"default": False, "tooltip": t("tip.bypass")}),
                 "enable_remap": (
                     "BOOLEAN",
-                    {
-                        "default": True,
-                        "tooltip": (
-                            "Anima only. Turn off to apply LoRAs untouched. For models "
-                            "that are not Anima this is a no-op either way."
-                        ),
-                    },
+                    {"default": True, "tooltip": t("tip.enable_remap")},
                 ),
                 "target_model": (
                     MODEL_CHOICES,
-                    {
-                        "default": AUTO_LABEL,
-                        "tooltip": (
-                            "Generation of the connected model. Auto detects it from the "
-                            "layer count; override if Auto gets it wrong."
-                        ),
-                    },
+                    {"default": AUTO_LABEL, "tooltip": t("tip.target_model")},
                 ),
                 "source_model": (
                     MODEL_CHOICES,
-                    {
-                        "default": AUTO_LABEL,
-                        "tooltip": (
-                            "Generation the LoRA was trained on. Auto infers it from the "
-                            "LoRA's highest block index -- which mis-reads adapters that "
-                            "only touch early layers, so override when in doubt."
-                        ),
-                    },
+                    {"default": AUTO_LABEL, "tooltip": t("tip.source_model")},
                 ),
                 "remap_mode": (
                     REMAP_MODES,
-                    {
-                        "default": REMAP_MODE_KEYS,
-                        "tooltip": (
-                            "Keys only: rewrite indices (new layers get no delta). "
-                            "Extend: also project each source delta onto the layers "
-                            "inserted from it (experimental)."
-                        ),
-                    },
+                    {"default": REMAP_MODE_KEYS, "tooltip": t("tip.remap_mode")},
                 ),
                 "extend_strength": (
                     "FLOAT",
                     {
                         "default": 0.5, "min": 0.0, "max": 2.0, "step": 0.05,
-                        "tooltip": (
-                            "Only used by Extend mode. 1.0 copies the source delta "
-                            "as-is; scales linearly."
-                        ),
+                        "tooltip": t("tip.extend_strength"),
                     },
                 ),
                 "weight_multiplier": (
                     "FLOAT",
                     {
                         "default": 1.0, "min": 0.0, "max": 4.0, "step": 0.05,
-                        "tooltip": (
-                            "Multiplies every weight in the stack. 1.0 = unchanged; "
-                            "use it to dial the whole stack up or down at once."
-                        ),
+                        "tooltip": t("tip.weight_multiplier"),
                     },
                 ),
                 "apply_clip": (
                     "BOOLEAN",
-                    {
-                        "default": True,
-                        "tooltip": (
-                            "OFF = never touch the text encoder: all CLIP weights are "
-                            "forced to 0 (model-only application)."
-                        ),
-                    },
+                    {"default": True, "tooltip": t("tip.apply_clip")},
                 ),
             },
             "optional": {
-                "clip": (
-                    "CLIP",
-                    {"tooltip": "Optional. Without it, CLIP weights are ignored."},
-                ),
+                "clip": ("CLIP", {"tooltip": t("tip.clip_optional")}),
+                "lora_stack": ("LORA_STACK", {"tooltip": t("tip.lora_stack_apply")}),
             },
         }
 
     RETURN_TYPES = ("MODEL", "CLIP", "STRING")
     RETURN_NAMES = ("MODEL", "CLIP", "REMAP_INFO")
     FUNCTION = "apply"
-    CATEGORY = "LoRA Stack"
-    DESCRIPTION = (
-        "Apply a LORA_STACK to MODEL/CLIP. Includes Anima cross-generation block "
-        "remapping (28 / 40 / 52 layers), so LoRAs trained on Anima base work on "
-        "Anima 2.9B / 3.8B."
-    )
+    CATEGORY = t("category")
+    DESCRIPTION = t("desc.apply_anima")
 
     def apply(
         self,
         model,
-        lora_stack,
         bypass,
         enable_remap,
         target_model,
@@ -257,51 +305,28 @@ class LoRAStackApply:
         weight_multiplier,
         apply_clip,
         clip=None,
+        lora_stack=None,
     ):
         if bypass:
             return (model, clip, "bypassed (MODEL/CLIP passed through untouched)")
-
-        multiplier = _num(weight_multiplier, 1.0)
-        target_count = (
-            resolve_dropdown(target_model) or detect_model_block_count(model)
-        ) if enable_remap else None
-
-        info = [f"target: {describe_count(target_count)}" if enable_remap else "remap: disabled"]
-        out_model = model
-        out_clip = clip
-        applied = 0
-
-        for entry in (lora_stack or []):
-            unpacked = _unpack_entry(entry)
-            if unpacked is None:
-                continue
-            name, w_model, w_clip = unpacked
-
-            w_model = _num(w_model * multiplier, 0.0)
-            w_clip = _num(w_clip * multiplier, 0.0)
-            if not apply_clip or out_clip is None:
-                w_clip = 0.0
-            if w_model == 0.0 and w_clip == 0.0:
-                info.append(f"{Path(name).stem}: skipped (weights are 0)")
-                continue
-
-            sd, line = _load_and_remap(
-                name, target_count, enable_remap, source_model, remap_mode, extend_strength
-            )
-            out_model, out_clip = comfy.sd.load_lora_for_models(
-                out_model, out_clip, sd, w_model, w_clip
-            )
-            applied += 1
-            info.append(f"{line}  [w={w_model:g}, clip={w_clip:g}]")
-
-        info.insert(1 if len(info) > 1 else 1, f"applied: {applied} lora(s)")
-        return (out_model, out_clip, "\n".join(info))
+        return _apply_stack(
+            model, clip, lora_stack,
+            enable_remap=enable_remap,
+            target_model=target_model,
+            source_model=source_model,
+            remap_mode=remap_mode,
+            extend_strength=extend_strength,
+            weight_multiplier=weight_multiplier,
+            apply_clip=apply_clip,
+        )
 
 
 NODE_CLASS_MAPPINGS = {
+    "LoRAStackApplyBasic": LoRAStackApplyBasic,
     "LoRAStackApply": LoRAStackApply,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "LoRAStackApply": "LoRA Stack Apply (Anima Remap)",
+    "LoRAStackApplyBasic": t("node.apply"),
+    "LoRAStackApply": t("node.apply_anima"),
 }

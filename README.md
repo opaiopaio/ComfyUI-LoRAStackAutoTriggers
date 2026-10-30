@@ -5,7 +5,8 @@
 | 节点 | 作用 |
 |---|---|
 | **LoRA Stack Auto Triggers** | 产出 `LORA_STACK` + 提示词/元数据，交给任意 Apply 节点 |
-| **LoRA Stack Apply (Anima Remap)** | 吃 `LORA_STACK` + `MODEL`，**remap 后应用**，输出 `MODEL/CLIP`。非 Anima 场景也能当通用应用器 |
+| **LoRA Stack Apply** | 普通应用器：`LORA_STACK` + `MODEL`（+可选 `CLIP`）→ `MODEL/CLIP`。**没装 easy-use 也能直接用** |
+| **LoRA Stack Apply (Anima Remap)** | 同上，额外做 Anima 跨代（28 / 40 / 52 层）block 重映射 → 多一个 `REMAP_INFO` |
 
 ---
 
@@ -129,11 +130,16 @@
 
 > 从 1.0.0 升级：旧工作流里存的 `:` 依旧按全选执行（行为不变）；新节点默认空值，只取第一条变体。
 
-## 节点二：LoRA Stack Apply (Anima Remap)
+## 节点二 & 三：应用器
 
-**应用器**：吃 `LORA_STACK` + `MODEL`（+ 可选 `CLIP`），把 stack 里的 LoRA 应用上去；若是 Anima 跨代，先做 block 重映射再应用。
+本包提供两个应用器，都是 easy-use「应用LoRA堆」的**替代品**（顺带解决"没装 easy-use 就没法用本包"的问题）：
 
-它是 easy-use「应用LoRA堆」的**替代品**（也顺带解决"没装 easy-use 就没法用本包"的问题）。
+| 节点 | 选项 | 适用 |
+|---|---|---|
+| **LoRA Stack Apply** | 只有 `bypass` / `weight_multiplier` / `apply_clip` | 普通模型，干净 |
+| **LoRA Stack Apply (Anima Remap)** | 上面三个 + `enable_remap` / `target_model` / `source_model` / `remap_mode` / `extend_strength` | Anima 跨代 |
+
+两者的端口顺序都是 **model → clip（可选）→ lora_stack（可选）**。ComfyUI 总是把必接端口画在可选端口之前，所以 `lora_stack` 放在 optional 里才能排在 `clip` 之后。
 
 ### 为什么它必须站在"应用节点"的位置上
 
@@ -203,14 +209,27 @@ zzz_remielle_anima_v2-rift1000: 28->40 remapped (840 moved, 0 dropped)  [w=0.85,
 - SDXL 风格的 `input_blocks` / `output_blocks` **不会**被误认成 Anima 块
 - 权重为 0 的条目、`"None"` 条目、空 stack 都会被安全跳过
 
+## 语言 / Language
+
+节点**标题、分类、说明与 tooltip** 按**系统语言**自动切换中文/英文；选词弹窗按**浏览器语言**切换。
+
+| 判定 | 结果 |
+|---|---|
+| Windows 系统 UI 语言为中文，或 `LANG`/`LC_ALL`/`LC_MESSAGES` 以 `zh` 开头 | 中文 |
+| 其他 | English |
+
+强制指定：设环境变量 `OPNODES_LANG=zh`（或 `en`）后重启 ComfyUI。启动日志会打印当前语言。
+
+> 下拉菜单的**取值**（Auto (detect) / Anima 2.9B (40 layers) / Keys only (recommended) 等）故意**不翻译**：ComfyUI 会把下拉取值存进工作流，翻译后换语言打开会变成未知值。只翻译标题、分类与提示文字。
 ## 文件结构
 
 ```
 ComfyUI-LoRAStackAutoTriggers/
-├── __init__.py                  # 入口（注册两个节点 + 路由 + web）
+├── __init__.py                  # 入口（注册三个节点 + 路由 + web）
 ├── oplorast_slots.py            # 两个节点共用的槽位/触发词逻辑
 ├── oplorast_node.py             # 节点一：LoRAStackAutoTriggers（stack 构建）
-├── oplorast_apply.py            # 节点二：LoRAStackApply（应用 + Anima remap）
+├── oplorast_apply.py            # 节点二/三：两个应用器（普通 / Anima remap）
+├── i18n.py                      # 中英双语（按系统语言自动切换）
 ├── anima_arch.py                # Anima 层数映射表（纯数据，可单测）
 ├── anima_remap.py               # 键名识别 / 层数探测 / state dict 重写
 ├── oplorast_utils.py            # 触发词逻辑（移植自 ATW）+ 后端路由
