@@ -705,25 +705,57 @@ function bindForceFetch(node) {
     ff._opBound = true;
 }
 
+// True when this node definition is one of ours: we look for the slot widgets
+// we declare rather than trusting the node name, because the name is now
+// localised and different frontend versions hand us `name` vs `display_name`
+// in this callback.
+function hasOurSlots(data) {
+    const req = (data && data.input && data.input.required) || {};
+    const opt = (data && data.input && data.input.optional) || {};
+    return !!(req.trigger_selector_1 || opt.trigger_selector_1);
+}
+
+function setupNode(node) {
+    try {
+        if (!node || !node.widgets) return;
+        for (let i = 1; i <= SLOTS; i++) {
+            bindSlot(node, i);
+            updateForSlot(node, i, false);
+        }
+        bindForceFetch(node);
+        const size = node.computeSize();
+        node.setSize([Math.max(node.size[0], size[0]), size[1]]);
+        if (node.setDirtyCanvas) node.setDirtyCanvas(true, true);
+    } catch (e) {
+        console.error(LOG, "node setup failed", e);
+    }
+}
+
 app.registerExtension({
     name: "lorastackautotriggers.picker",
     async beforeRegisterNodeDef(nodeType, nodeData) {
-        if (!NODE_NAMES.includes(nodeData.name)) return;
+        if (!hasOurSlots(nodeData) && !NODE_NAMES.includes(nodeData && nodeData.name)) {
+            return;
+        }
+        console.info(LOG, "picker hook installed for", (nodeData && nodeData.name) || "?");
+
         const onNodeCreated = nodeType.prototype.onNodeCreated;
         nodeType.prototype.onNodeCreated = function () {
             const r = onNodeCreated ? onNodeCreated.apply(this, arguments) : undefined;
-            const node = this;
-            setTimeout(() => {
-                for (let i = 1; i <= SLOTS; i++) {
-                    bindSlot(node, i);
-                    updateForSlot(node, i, false);
-                }
-                bindForceFetch(node);
-                const size = node.computeSize();
-                node.setSize([Math.max(node.size[0], size[0]), size[1]]);
-                if (node.setDirtyCanvas) node.setDirtyCanvas(true, true);
-            }, 60);
+            setTimeout(() => setupNode(this), 60);
+            return r;
+        };
+
+        // Workflows loaded from disk do not always run onNodeCreated in the same
+        // order relative to extensions, so bind again after configure. Every
+        // step is idempotent (guarded by _opBound / _opBtnN / type === hidden).
+        const onConfigure = nodeType.prototype.onConfigure;
+        nodeType.prototype.onConfigure = function () {
+            const r = onConfigure ? onConfigure.apply(this, arguments) : undefined;
+            setTimeout(() => setupNode(this), 60);
             return r;
         };
     },
 });
+
+console.info(LOG, "extension registered (lang:", IS_ZH ? "zh" : "en", ")");
