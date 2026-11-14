@@ -6,6 +6,21 @@ SemVer: new node = minor, bug fix = patch, node-key change = major.
 > Node **keys** are a permanent contract (`LoRA Stack Auto Triggers`, `LoRAStackApplyBasic`,
 > `LoRAStackApply`) — they live inside users' workflow JSON and are never renamed.
 
+## [1.2.7] — 2026-11-15
+
+### Fixed
+- `/lorastack/ping` (frontend diagnostic beacon) now stops writing once `_ping.log` reaches 64 KB and
+  truncates the `stage` value: the endpoint is unauthenticated, so it must not be able to grow without
+  bound.
+
+### Added
+- `examples/quickstart_stack.json` + `examples/README.md` (minimal graph, no other custom node needed).
+- README documents the single optional Civitai lookup (hash only, cache-first, offline fallback).
+
+### Notes
+- Consolidated release: contains everything from 1.2.5/1.2.6 (source_model precedence fix,
+  `lang.txt` language override, no environment-variable reads, no FFI).
+
 ## [1.2.6] — 2026-11-15
 
 ### Changed
