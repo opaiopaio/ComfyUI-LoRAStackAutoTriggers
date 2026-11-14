@@ -1,6 +1,10 @@
-# ComfyUI-LoRAStackAutoTriggers
+﻿# ComfyUI-LoRAStackAutoTriggers
 
 [English](README.md) | **中文**
+
+> **OPNodes 系列** · 作者 欧派欧派欧（opaiopaio）· MIT
+> 🧩 **本包**：LoRA 堆叠 / 自动触发词 / Anima 跨代重映射
+> 🎯 **姊妹包**（在建）：`OPNodes · Seg` —— SAM2+GroundingDINO 分区 与 ControlNet-LLLite 分区控制
 
 堆 LoRA、可视化挑触发词、再应用——并且带**自动 block 重映射**，让训练在 **Anima** 上的
 LoRA 也能在 **Anima 2.9B / 3.8B** 上正常生效。

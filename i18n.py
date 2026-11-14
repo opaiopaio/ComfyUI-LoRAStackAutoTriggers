@@ -1,4 +1,4 @@
-"""Bilingual strings (English / Chinese) for this node pack.
+﻿"""Bilingual strings (English / Chinese) for this node pack.
 
 Language is chosen from the system, not the browser:
 
@@ -65,7 +65,7 @@ def language_name() -> str:
 _STRINGS = {
     # ------------------------------------------------------------------ en --
     "en": {
-        "category": "LoRA Stack",
+        "category": "OPNodes/LoRA",
         "node.stack": "LoRA Stack Auto Triggers",
         "node.apply": "LoRA Stack Apply",
         "node.apply_anima": "LoRA Stack Apply (Anima Remap)",
@@ -149,7 +149,7 @@ _STRINGS = {
     },
     # ------------------------------------------------------------------ zh --
     "zh": {
-        "category": "LoRA 堆",
+        "category": "OPNodes/LoRA",
         "node.stack": "LoRA 堆 · 自动触发词",
         "node.apply": "应用 LoRA 堆",
         "node.apply_anima": "应用 LoRA 堆（Anima 跨代）",

@@ -1,4 +1,4 @@
-﻿"""Offline tests for the Anima remap layer and both nodes.
+"""Offline tests for the Anima remap layer and both nodes.
 
 Run from the node folder (no ComfyUI required):
 
@@ -405,11 +405,11 @@ import i18n as I18N
 check_true("i18n: 当前语言能取到译文", I18N.t("node.stack") != "node.stack")
 os.environ["OPNODES_LANG"] = "zh"
 importlib.reload(I18N)
-check("i18n zh: category", I18N.t("category"), "LoRA 堆")
+check("i18n zh: category", I18N.t("category"), "OPNodes/LoRA")
 check("i18n zh: 带占位符", I18N.t("tip.lora_on", i=3), "启用/停用第 3 个 LoRA")
 os.environ["OPNODES_LANG"] = "en"
 importlib.reload(I18N)
-check("i18n en: category", I18N.t("category"), "LoRA Stack")
+check("i18n en: category", I18N.t("category"), "OPNodes/LoRA")
 check("i18n en: 带占位符", I18N.t("tip.lora_on", i=3), "Enable/disable LoRA 3")
 del os.environ["OPNODES_LANG"]
 importlib.reload(I18N)

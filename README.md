@@ -1,6 +1,10 @@
-# ComfyUI-LoRAStackAutoTriggers
+﻿# ComfyUI-LoRAStackAutoTriggers
 
 **English** | [中文](README.zh.md)
+
+> **OPNodes series** · by 欧派欧派欧 (opaiopaio) · MIT
+> 🧩 **This package**: LoRA stacking · auto trigger words · Anima cross-generation remap
+> 🎯 **Sister package** (in progress): `OPNodes · Seg` — SAM2+GroundingDINO segmentation and ControlNet-LLLite per-segment control
 
 Stack LoRAs, pick their trigger words visually, and apply them — including automatic
 block remapping so LoRAs trained on **Anima** still work on **Anima 2.9B / 3.8B**.
