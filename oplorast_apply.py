@@ -89,8 +89,21 @@ def _load_and_remap(name, target_count, enable_remap, source_choice, remap_mode,
     if not target_count:
         return sd, f"{stem}: applied as-is (target generation unknown)"
 
+    # The FILE is the ground truth for "which generation was this LoRA trained
+    # on". A manual source_model that disagrees (the classic mistake: setting it
+    # to the same generation as the model) used to short-circuit the remap and
+    # apply 28-layer weights onto 40-layer blocks -- silent, and it looks like
+    # "remap is broken". Detection wins; the dropdown is only a fallback.
     detected = detect_lora_block_count(sd.keys())
-    source_count = resolve_dropdown(source_choice) or detected
+    chosen = resolve_dropdown(source_choice)
+    note = ""
+    if detected and chosen and detected != chosen:
+        note = (f" [source_model={describe_count(chosen)} ignored: "
+                f"the file is {describe_count(detected)}]")
+        print(f"[LoRA Stack Apply] {stem}: source_model says "
+              f"{describe_count(chosen)} but the file is {describe_count(detected)}; "
+              "using the file")
+    source_count = detected or chosen
     if not source_count:
         return sd, f"{stem}: applied as-is (no block keys detected)"
 
@@ -106,20 +119,23 @@ def _load_and_remap(name, target_count, enable_remap, source_choice, remap_mode,
 
     mapping = get_mapping(source_count, target_count)
     if mapping is None:
-        return sd, f"{stem}: {source_count}->{target_count} no mapping, applied as-is"
+        if source_count == target_count:
+            return sd, (f"{stem}: no remap needed (the file already matches "
+                       f"{describe_count(target_count)}){note}")
+        return sd, f"{stem}: {source_count}->{target_count} no mapping, applied as-is{note}"
 
     if remap_mode == REMAP_MODE_EXTEND:
         sd, stats = extend_state_dict(sd, mapping, target_count, extend_strength)
         return sd, (
             f"{stem}: {source_count}->{target_count} remapped "
             f"(+{stats['added']} tensors onto new layers x{extend_strength:g}, "
-            f"{stats['dropped']} dropped)"
+            f"{stats['dropped']} dropped){note}"
         )
 
     sd, stats = remap_state_dict(sd, mapping)
     return sd, (
         f"{stem}: {source_count}->{target_count} remapped "
-        f"({stats['remapped']} moved, {stats['dropped']} dropped)"
+        f"({stats['remapped']} moved, {stats['dropped']} dropped){note}"
     )
 
 

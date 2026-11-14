@@ -1,4 +1,4 @@
-﻿# Changelog
+# Changelog
 
 All notable changes to **ComfyUI-LoRAStackAutoTriggers** (OPNodes · LoRAStackAutoTriggers).
 SemVer: new node = minor, bug fix = patch, node-key change = major.
@@ -6,6 +6,15 @@ SemVer: new node = minor, bug fix = patch, node-key change = major.
 > Node **keys** are a permanent contract (`LoRA Stack Auto Triggers`, `LoRAStackApplyBasic`,
 > `LoRAStackApply`) — they live inside users' workflow JSON and are never renamed.
 
+## [1.2.5] — 2026-11-14
+
+### Fixed
+- `target_model` / `source_model` mismatch no longer silently disables remapping. The LoRA file is now
+  the ground truth for its own generation, so manually setting `source_model` to the *model's*
+  generation (the natural but wrong choice) is ignored with a note in `REMAP_INFO` instead of
+  applying 28-layer weights onto 40-layer blocks. This looked exactly like "remap broke".
+- `REMAP_INFO` now says "no remap needed (the file already matches …)" when the counts match, and
+  reports when `source_model` was overridden by detection.
 ## [1.2.4] — unreleased
 
 ### Security

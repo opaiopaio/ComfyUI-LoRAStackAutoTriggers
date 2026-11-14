@@ -1,4 +1,4 @@
-﻿"""Offline tests for the Anima remap layer and both nodes.
+"""Offline tests for the Anima remap layer and both nodes.
 
 Run from the node folder (no ComfyUI required):
 
@@ -309,7 +309,7 @@ check("模型强度按 stack 传入", APPLIED[0]["strength_model"], 0.85)
 
 # 同代：28 层模型
 _, _, info_same = run_apply(28)
-check_true("同代时不重映射", "as-is" in info_same, info_same)
+check_true("同代时不重映射", "no remap needed" in info_same, info_same)
 check("同代时块位保持原样", sorted(R.block_indices(APPLIED[0]["keys"])), list(range(28)))
 
 # 关闭 remap
@@ -321,12 +321,22 @@ out_model, out_clip, info_bypass = run_apply(40, bypass=True)
 check("bypass 时不加载任何 LoRA", len(APPLIED), 0)
 check_true("bypass 提示", "bypassed" in info_bypass, info_bypass)
 
-# 降级必须报错
+# source_model 误导：文件才是真相（本次修的核心）
+_, _, info_conflict = run_apply(28, source_choice="Anima 2.9B (40 layers)")
+check_true("source 覆盖被忽略且提示", "ignored" in info_conflict, info_conflict)
+check("source 覆盖后块位保持 28", sorted(R.block_indices(APPLIED[0]["keys"])), list(range(28)))
+
+# 真正降级（文件 40 层 → 目标 28 层）必须报错
+_FAKE_FILES["/fake/biglora.safetensors"] = make_lora_sd(range(40))
 try:
-    run_apply(28, source_choice="Anima 2.9B (40 layers)")
-    check_true("源>目标 应抛错", False, "没有抛错")
+    run_apply(28, stack=[("biglora.safetensors", 1.0, 0.0)])
+    check_true("文件 40 → 目标 28 应抛错", False, "没有抛错")
 except ValueError as e:
-    check_true("源>目标 抛 ValueError", "not supported" in str(e).lower(), str(e))
+    check_true("文件 40 → 目标 28 抛 ValueError", "not supported" in str(e).lower(), str(e))
+
+# 同一文件在 40 层模型上正常重映射
+_, _, info_big = run_apply(40, stack=[("biglora.safetensors", 1.0, 0.0)])
+check_true("文件 40 → 目标 40 无需重映射", "no remap needed" in info_big, info_big)
 
 # 手动覆盖目标代
 _, _, info_manual = run_apply(28, target_choice="Anima 3.8B (52 layers)")
