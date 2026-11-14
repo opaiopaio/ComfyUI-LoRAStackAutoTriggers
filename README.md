@@ -184,6 +184,11 @@ side by side without double-remapping. You only need one of them anyway.
 
 ---
 
+## Examples
+
+`examples/quickstart_stack.json` is the minimal graph (`CheckpointLoaderSimple` -> stack ->
+`LoRA Stack Apply`). No other custom node is required.
+
 ## Network access (read this if you care about sandboxing)
 
 The only outbound request in this package is an **optional, cache-first** lookup of LoRA trigger words:

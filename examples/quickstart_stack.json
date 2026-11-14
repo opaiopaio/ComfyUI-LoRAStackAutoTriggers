@@ -1,0 +1,210 @@
+{
+  "last_node_id": 3,
+  "last_link_id": 2,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "CheckpointLoaderSimple",
+      "pos": [
+        80,
+        100
+      ],
+      "size": [
+        315,
+        98
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL",
+          "links": [
+            1
+          ]
+        },
+        {
+          "name": "CLIP",
+          "type": "CLIP",
+          "links": null
+        },
+        {
+          "name": "VAE",
+          "type": "VAE",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "CheckpointLoaderSimple"
+      },
+      "widgets_values": [
+        "anima.safetensors"
+      ]
+    },
+    {
+      "id": 2,
+      "type": "LoRA Stack Auto Triggers",
+      "pos": [
+        80,
+        260
+      ],
+      "size": [
+        420,
+        320
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "lora_stack",
+          "type": "LORA_STACK",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "LORA_STACK",
+          "type": "LORA_STACK",
+          "links": [
+            2
+          ]
+        },
+        {
+          "name": "LORA_PROMPT",
+          "type": "STRING",
+          "links": null
+        },
+        {
+          "name": "LORA_MetaData",
+          "type": "LORA_MetaData",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LoRA Stack Auto Triggers"
+      },
+      "widgets_values": [
+        false,
+        "None",
+        1.0,
+        1.0,
+        "none",
+        1.0,
+        "",
+        false,
+        "None",
+        1.0,
+        1.0,
+        "none",
+        1.0,
+        "",
+        false,
+        "None",
+        1.0,
+        1.0,
+        "none",
+        1.0,
+        "",
+        false,
+        "None",
+        1.0,
+        1.0,
+        "none",
+        1.0,
+        "",
+        false,
+        false,
+        true
+      ]
+    },
+    {
+      "id": 3,
+      "type": "LoRAStackApply",
+      "pos": [
+        560,
+        260
+      ],
+      "size": [
+        360,
+        300
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 1
+        },
+        {
+          "name": "clip",
+          "type": "CLIP",
+          "link": null
+        },
+        {
+          "name": "lora_stack",
+          "type": "LORA_STACK",
+          "link": 2
+        }
+      ],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL",
+          "links": null
+        },
+        {
+          "name": "CLIP",
+          "type": "CLIP",
+          "links": null
+        },
+        {
+          "name": "REMAP_INFO",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LoRAStackApply"
+      },
+      "widgets_values": [
+        false,
+        true,
+        "Auto (detect)",
+        "Auto (detect)",
+        "Keys only (recommended)",
+        0.5,
+        1.0,
+        true
+      ]
+    }
+  ],
+  "links": [
+    [
+      1,
+      1,
+      0,
+      3,
+      0,
+      "MODEL"
+    ],
+    [
+      2,
+      2,
+      0,
+      3,
+      2,
+      "LORA_STACK"
+    ]
+  ],
+  "groups": [],
+  "config": {},
+  "extra": {
+    "ds": {}
+  },
+  "version": 0.4
+}

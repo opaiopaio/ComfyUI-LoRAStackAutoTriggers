@@ -174,6 +174,11 @@ LoRA 的键写的是 `blocks.2`。在 40 层模型上 `blocks.2` **确实存在*
 
 ---
 
+## 示例
+
+`examples/quickstart_stack.json` 是最小可跑图（`CheckpointLoaderSimple` -> 堆栈节点 ->
+`LoRA Stack Apply`），不依赖任何其它自定义节点。
+
 ## 网络行为（在意沙盒的话请看这里）
 
 本包**唯一**的出站请求是可选的、缓存优先的触发词查询：

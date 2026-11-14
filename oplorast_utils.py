@@ -1,4 +1,4 @@
-﻿# ComfyUI-LoRAStackAutoTriggers trigger-word utilities.
+# ComfyUI-LoRAStackAutoTriggers trigger-word utilities.
 # Ported from ComfyUI-Lora-Auto-Trigger-Words (utils.py) with improvements:
 #   - requests timeout added (original had none -> could hang)
 #   - atomic cache write (os.replace) to reduce concurrent corruption
@@ -394,11 +394,13 @@ def setup_lora_trigger_routes():
         loading problems can be diagnosed without the browser console.
         """
         try:
-            stage = request.rel_url.query.get("stage", "?")
-            with open(
-                os.path.join(_PLUGIN_DIR, "_ping.log"), "a", encoding="utf-8"
-            ) as f:
-                f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')}  {stage}\n")
+            stage = str(request.rel_url.query.get("stage", "?"))[:120]
+            log_path = os.path.join(_PLUGIN_DIR, "_ping.log")
+            # Bounded: this endpoint is unauthenticated, so never let it grow
+            # without limit (a browser tab in a loop would otherwise fill the disk).
+            if not os.path.exists(log_path) or os.path.getsize(log_path) < 64 * 1024:
+                with open(log_path, "a", encoding="utf-8") as f:
+                    f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')}  {stage}\n")
         except Exception:
             pass
         return web.json_response({"ok": True})
