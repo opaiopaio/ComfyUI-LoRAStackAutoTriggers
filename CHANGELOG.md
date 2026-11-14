@@ -1,4 +1,4 @@
-# Changelog
+﻿# Changelog
 
 All notable changes to **ComfyUI-LoRAStackAutoTriggers** (OPNodes · LoRAStackAutoTriggers).
 SemVer: new node = minor, bug fix = patch, node-key change = major.
@@ -6,7 +6,23 @@ SemVer: new node = minor, bug fix = patch, node-key change = major.
 > Node **keys** are a permanent contract (`LoRA Stack Auto Triggers`, `LoRAStackApplyBasic`,
 > `LoRAStackApply`) — they live inside users' workflow JSON and are never renamed.
 
-## [1.2.2] — unreleased
+## [1.2.4] — unreleased
+
+### Security
+- `/lorastack/trigger_words` rejects any `lora_name` that is not in the installed LoRA list:
+  no cache write, no hashing of an arbitrary path, no outbound request. Only real LoRA names
+  can reach the cache/metadata code.
+- The published package excludes `tests/` via `.comfyignore` (smaller zip, smaller scan surface).
+
+### Changed
+- version → `1.2.4`
+
+## [1.2.3] — 2026-11-14
+
+Same content as 1.2.2 — re-cut because that upload left the version record pending without a
+package file.
+
+## [1.2.2] — 2026-11-14
 
 Packaging and branding only — **no functional changes**, no workflow needs editing.
 

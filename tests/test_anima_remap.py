@@ -1,4 +1,4 @@
-"""Offline tests for the Anima remap layer and both nodes.
+﻿"""Offline tests for the Anima remap layer and both nodes.
 
 Run from the node folder (no ComfyUI required):
 
@@ -414,6 +414,27 @@ check("i18n en: 带占位符", I18N.t("tip.lora_on", i=3), "Enable/disable LoRA 
 del os.environ["OPNODES_LANG"]
 importlib.reload(I18N)
 check_true("i18n: 未知 key 回退为 key 本身", I18N.t("no.such.key") == "no.such.key")
+
+# --------------------------------------------------------------------------- #
+# 9. 路由输入校验（安全：拒绝任意客户端传入的 LoRA 名）
+# --------------------------------------------------------------------------- #
+print()
+print("=== 路由输入校验 ===")
+import oplorast_utils as U  # noqa: E402
+
+check("空名被拒绝", U.is_known_lora(""), False)
+check('"None" 被拒绝', U.is_known_lora("None"), False)
+check("未安装的名字被拒绝", U.is_known_lora("not_installed.safetensors"), False)
+check("路径穿越被拒绝", U.is_known_lora("../../etc/passwd"), False)
+
+import folder_paths as _FP  # noqa: E402
+_ORIG_LIST = _FP.get_filename_list
+_FP.get_filename_list = lambda kind: ["mylora.safetensors"]
+check("已安装名字通过", U.is_known_lora("mylora.safetensors"), True)
+check("相似但不存在的名字被拒绝", U.is_known_lora("mylora"), False)
+check("已知列表能取到", U.known_lora_names(), {"mylora.safetensors"})
+_FP.get_filename_list = _ORIG_LIST
+check("恢复后再次拒绝", U.is_known_lora("mylora.safetensors"), False)
 
 # --------------------------------------------------------------------------- #
 print()

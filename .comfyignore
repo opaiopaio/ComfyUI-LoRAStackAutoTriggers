@@ -1,0 +1,10 @@
+﻿# Files excluded from the published Registry package.
+# Keeps the zip small and the security-scan surface minimal.
+tests/
+.github/
+node.zip
+_ping.log
+loras_tags.json
+__pycache__/
+*.pyc
+.ruff_cache/

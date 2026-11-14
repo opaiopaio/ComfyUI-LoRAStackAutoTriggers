@@ -1,4 +1,4 @@
-# ComfyUI-LoRAStackAutoTriggers trigger-word utilities.
+﻿# ComfyUI-LoRAStackAutoTriggers trigger-word utilities.
 # Ported from ComfyUI-Lora-Auto-Trigger-Words (utils.py) with improvements:
 #   - requests timeout added (original had none -> could hang)
 #   - atomic cache write (os.replace) to reduce concurrent corruption
@@ -302,6 +302,30 @@ def split_segments(text):
 # --------------------------------------------------------------------------- #
 # Backend route
 # --------------------------------------------------------------------------- #
+# --------------------------------------------------------------------------- #
+# Input validation (security)
+# --------------------------------------------------------------------------- #
+def known_lora_names():
+    """Names of the LoRAs actually installed in this ComfyUI instance."""
+    try:
+        import folder_paths
+
+        return set(folder_paths.get_filename_list("loras") or [])
+    except Exception:
+        return set()
+
+
+def is_known_lora(lora_name):
+    """True only for names present in the local LoRA list.
+
+    The HTTP route must never act on an arbitrary client-supplied name: doing so
+    would let a local web page make the server hash an arbitrary path, persist an
+    attacker-chosen cache key, and trigger outbound requests.
+    """
+    if not lora_name or lora_name in ("None", "none"):
+        return False
+    return lora_name in known_lora_names()
+
 def _peek_block_count(lora_name):
     """Anima generation of this LoRA (28 / 40 / 52 layers) for the UI badge.
 
@@ -332,7 +356,11 @@ def setup_lora_trigger_routes():
             "tags": [], "variants": [], "meta": [], "blocks": None,
             "civitai_count": 0, "meta_count": 0, "ok": True,
         }
-        if not lora_name or lora_name == "None":
+        # SECURITY: an untrusted name is a pure no-op -- no file write, no
+        # hashing of an arbitrary path, no outbound request. Only names from the
+        # installed LoRA list may reach the cache/metadata code below.
+        if not is_known_lora(lora_name):
+            empty["reason"] = "unknown lora name"
             return web.json_response(empty)
         try:
             st = get_structured_tags(lora_name, force)
