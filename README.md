@@ -2,7 +2,7 @@
 
 **English** | [中文](README.zh.md)
 
-> **OPNodes series** · by 欧派欧派欧 (opaiopaio) · MIT
+> Part of the **OPNodes** node pack · MIT
 > 🧩 **This package**: LoRA stacking · auto trigger words · Anima cross-generation remap
 > 🎯 **Sister package** (in progress): `OPNodes · Seg` — SAM2+GroundingDINO segmentation and ControlNet-LLLite per-segment control
 

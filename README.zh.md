@@ -2,7 +2,7 @@
 
 [English](README.md) | **中文**
 
-> **OPNodes 系列** · 作者 欧派欧派欧（opaiopaio）· MIT
+> **OPNodes** 节点包成员 · MIT
 > 🧩 **本包**：LoRA 堆叠 / 自动触发词 / Anima 跨代重映射
 > 🎯 **姊妹包**（在建）：`OPNodes · Seg` —— SAM2+GroundingDINO 分区 与 ControlNet-LLLite 分区控制
 
