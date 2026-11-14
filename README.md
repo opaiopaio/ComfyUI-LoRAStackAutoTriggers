@@ -184,6 +184,20 @@ side by side without double-remapping. You only need one of them anyway.
 
 ---
 
+## Network access (read this if you care about sandboxing)
+
+The only outbound request in this package is an **optional, cache-first** lookup of LoRA trigger words:
+
+```
+GET https://civitai.com/api/v1/model-versions/by-hash/<sha256 of the .lora file>
+```
+
+- It is issued **only** when you press a stack entry's trigger-words button and the LoRA is not already
+  in the local cache (`loras_tags.json`, next to the package).
+- It sends the file's SHA256 and nothing else. No tokens, no telemetry, no model data.
+- If the request fails (offline, blocked) the node falls back to the cache / manual triggers and logs a
+  warning; nothing else in the package touches the network.
+
 ## Language
 
 Node titles, categories, descriptions and tooltips follow the **system language**
