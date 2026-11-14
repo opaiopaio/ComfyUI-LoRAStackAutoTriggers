@@ -1,4 +1,4 @@
-﻿"""Bilingual strings (English / Chinese) for this node pack.
+"""Bilingual strings (English / Chinese) for this node pack.
 
 Language is chosen from the system, not the browser:
 
@@ -18,35 +18,46 @@ Only node titles, categories, descriptions and tooltips are translated.
 from __future__ import annotations
 
 import os
-import sys
+
+
+def _lang_from_name(value):
+    """Map a locale name to ``zh`` / ``en`` (None when unknown).
+
+    Windows reports ``"Chinese (Simplified)_China"`` rather than ``zh_CN``.
+    """
+    v = (value or "").strip().lower()
+    if not v:
+        return None
+    if v.startswith("zh") or "chinese" in v:
+        return "zh"
+    if v.startswith("en") or "english" in v:
+        return "en"
+    return None
+
+
+def _lang_override():
+    """Optional ``lang.txt`` next to this module (contents ``zh`` or ``en``)."""
+    try:
+        path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "lang.txt")
+        if os.path.isfile(path):
+            with open(path, encoding="utf-8") as fh:
+                return _lang_from_name(fh.read())
+    except Exception:
+        pass
+    return None
 
 
 def _detect_language() -> str:
-    forced = (os.environ.get("OPNODES_LANG") or "").strip().lower()
+    forced = _lang_override()
     if forced:
-        return "zh" if forced.startswith("zh") else "en"
-
-    if sys.platform == "win32":
-        try:
-            import ctypes
-
-            langid = ctypes.windll.kernel32.GetUserDefaultUILanguage()
-            primary = langid & 0x3FF
-            return "zh" if primary == 0x04 else "en"  # LANG_CHINESE
-        except Exception:
-            pass
-
-    for var in ("LC_ALL", "LC_MESSAGES", "LANG"):
-        value = (os.environ.get(var) or "").strip().lower()
-        if value:
-            return "zh" if value.startswith("zh") else "en"
+        return forced
 
     try:
         import locale
 
-        name = (locale.getlocale()[0] or "").lower()
-        if name:
-            return "zh" if name.startswith("zh") else "en"
+        hit = _lang_from_name(locale.getlocale()[0])
+        if hit:
+            return hit
     except Exception:
         pass
 

@@ -413,15 +413,27 @@ import importlib
 import i18n as I18N
 
 check_true("i18n: 当前语言能取到译文", I18N.t("node.stack") != "node.stack")
-os.environ["OPNODES_LANG"] = "zh"
-importlib.reload(I18N)
+_LANG_FILE = os.path.join(os.path.dirname(os.path.abspath(I18N.__file__)), "lang.txt")
+
+
+def _with_lang(value):
+    if value is None:
+        if os.path.exists(_LANG_FILE):
+            os.remove(_LANG_FILE)
+    else:
+        with open(_LANG_FILE, "w", encoding="utf-8") as fh:
+            fh.write(value)
+    return importlib.reload(I18N)
+
+
+with_lang = _with_lang
+_with_lang("zh")
 check("i18n zh: category", I18N.t("category"), "OPNodes/LoRA")
 check("i18n zh: 带占位符", I18N.t("tip.lora_on", i=3), "启用/停用第 3 个 LoRA")
-os.environ["OPNODES_LANG"] = "en"
-importlib.reload(I18N)
+_with_lang("en")
 check("i18n en: category", I18N.t("category"), "OPNodes/LoRA")
 check("i18n en: 带占位符", I18N.t("tip.lora_on", i=3), "Enable/disable LoRA 3")
-del os.environ["OPNODES_LANG"]
+_with_lang(None)
 importlib.reload(I18N)
 check_true("i18n: 未知 key 回退为 key 本身", I18N.t("no.such.key") == "no.such.key")
 

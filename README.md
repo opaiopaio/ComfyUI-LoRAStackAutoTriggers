@@ -1,4 +1,4 @@
-﻿# ComfyUI-LoRAStackAutoTriggers
+# ComfyUI-LoRAStackAutoTriggers
 
 **English** | [中文](README.zh.md)
 
@@ -189,11 +189,8 @@ side by side without double-remapping. You only need one of them anyway.
 Node titles, categories, descriptions and tooltips follow the **system language**
 (Chinese or English). The picker dialog follows the **browser language**.
 
-Force a language with an environment variable before starting ComfyUI:
-
-```bash
-OPNODES_LANG=zh    # or en
-```
+To force a language, drop a `lang.txt` containing `zh` or `en` next to `i18n.py` (inside the
+package folder) and restart ComfyUI. No environment variables are read.
 
 Dropdown *values* (`Auto (detect)`, `Anima 2.9B (40 layers)`, …) are intentionally **not**
 translated: ComfyUI stores the selected value inside the workflow, so translating them would

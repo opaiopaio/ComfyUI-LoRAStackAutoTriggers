@@ -9,7 +9,7 @@
 #                                    -> MODEL / CLIP / REMAP_INFO
 #
 # Titles, categories, descriptions and tooltips are localised from the system
-# language (see i18n.py); set OPNODES_LANG=zh|en to force one.
+# locale (see i18n.py); a lang.txt next to i18n.py (zh|en) forces one.
 import os
 import sys
 

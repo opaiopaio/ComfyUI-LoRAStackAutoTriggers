@@ -1,4 +1,4 @@
-﻿# Files excluded from the published Registry package.
+# Files excluded from the published Registry package.
 # Keeps the zip small and the security-scan surface minimal.
 tests/
 .github/
@@ -8,3 +8,4 @@ loras_tags.json
 __pycache__/
 *.pyc
 .ruff_cache/
+lang.txt

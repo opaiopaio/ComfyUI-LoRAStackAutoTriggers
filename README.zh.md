@@ -1,4 +1,4 @@
-﻿# ComfyUI-LoRAStackAutoTriggers
+# ComfyUI-LoRAStackAutoTriggers
 
 [English](README.md) | **中文**
 
@@ -179,11 +179,7 @@ LoRA 的键写的是 `blocks.2`。在 40 层模型上 `blocks.2` **确实存在*
 节点**标题、分类、说明、tooltip** 跟随**系统语言**（中文或英文）；
 选词弹窗跟随**浏览器语言**。
 
-想强制指定，在启动 ComfyUI 前设环境变量：
-
-```bash
-OPNODES_LANG=zh    # 或 en
-```
+想强制指定，就在包目录里建一个 `lang.txt`（内容写 `zh` 或 `en`），重启 ComfyUI 生效。**本包不读取任何环境变量**。
 
 下拉菜单的**取值**（`Auto (detect)`、`Anima 2.9B (40 layers)` 等）故意**不翻译**：
 ComfyUI 会把选中的取值存进工作流，翻译后换语言打开会变成未知值。

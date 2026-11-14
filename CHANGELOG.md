@@ -6,6 +6,13 @@ SemVer: new node = minor, bug fix = patch, node-key change = major.
 > Node **keys** are a permanent contract (`LoRA Stack Auto Triggers`, `LoRAStackApplyBasic`,
 > `LoRAStackApply`) — they live inside users' workflow JSON and are never renamed.
 
+## [1.2.6] — 2026-11-15
+
+### Changed
+- Language override is now a `lang.txt` file in the package folder instead of an environment
+  variable, and the Windows UI-language probe no longer uses FFI. Removes the
+  `python_environment_manipulation` finding from the registry scanner.
+
 ## [1.2.5] — 2026-11-14
 
 ### Fixed
